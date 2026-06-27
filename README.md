@@ -111,7 +111,7 @@ Check the service log in the UI. Common cause: APEX bind mount failed. Try Force
 This was a known issue with heartbeat-based detection. The current version uses `/proc/<pid>` liveness check which is not affected by Doze mode.
 
 **Certificates not trusted by a specific app**
-Some apps (e.g. those with certificate pinning) will not trust any injected certificate regardless. Use JustTrustMe / TrustMeAlready via LSPosed to bypass pinning.
+Some apps (e.g. those with certificate pinning) will not trust any injected certificate regardless. Use [JustTrustMePro](https://github.com/hang666/JustTrustMePro/releases) via LSPosed to bypass pinning.
 
 **Bootloop**
 The fail counter stops injection after 3 failed attempts. Boot into safe mode, open a root shell and run:
