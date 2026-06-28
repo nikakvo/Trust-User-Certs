@@ -39,6 +39,8 @@ This module copies user certificates from `/data/misc/user/0/cacerts-added` into
 3. Reboot
 4. Open the module UI from KSU Manager
 
+<img width="300" alt="Trust-User-Certs" src="https://raw.githubusercontent.com/nikakvo/Trust-User-Certs/main/Trust-User-Certs.jpg" />
+
 ---
 
 ## UI
