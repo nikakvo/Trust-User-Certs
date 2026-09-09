@@ -1,0 +1,7 @@
+id=trust-user-certs
+name=TrustUserCerts
+version=v3.1
+versionCode=4
+author=Tears Burn
+description=Moves user CA certificates into the system trust store. Live Sync, boot-loop guard, verified injection. Supports Android 7-16 on Magisk/KSU/APatch.
+updateJson=https://raw.githubusercontent.com/nikakvo/Trust-User-Certs/main/update.json

@@ -1,0 +1,1271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>TrustUserCerts</title>
+<style>
+:root {
+  --bg:        #080b0f;
+  --bg2:       #0c1018;
+  --surface:   #101620;
+  --surface2:  #141c28;
+  --border:    #1e2a3a;
+  --border2:   #243040;
+  --blue:      #3b82f6;
+  --blue-dim:  rgba(59,130,246,0.12);
+  --teal:      #2dd4bf;
+  --teal-dim:  rgba(45,212,191,0.12);
+  --green:     #4ade80;
+  --green-dim: rgba(74,222,128,0.12);
+  --red:       #f87171;
+  --red-dim:   rgba(248,113,113,0.12);
+  --amber:     #fbbf24;
+  --amber-dim: rgba(251,191,36,0.12);
+  --text:      #94a3b8;
+  --text-dim:  #3d5068;
+  --text-hi:   #e2e8f0;
+  --mono:      'Courier New', Courier, monospace;
+  --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  /* Leave room for the navigation bar (3-button or gesture) and the status bar.
+     We never go immersive, so the system bars stay visible at all times. */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 32px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  background-image:
+    linear-gradient(rgba(59,130,246,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ── HEADER ── */
+.header {
+  padding: 14px 16px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 14px);
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(59,130,246,0.05) 0%, transparent 100%);
+  position: sticky; top: 0; z-index: 20;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.header-left { display: flex; align-items: center; gap: 11px; }
+.shield {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, #0f1a2e, #0c1018);
+  border: 1px solid rgba(59,130,246,0.35);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 0 14px rgba(59,130,246,0.12);
+  flex-shrink: 0;
+}
+.shield svg { width: 18px; height: 18px; }
+.header-title { font-size: 15px; font-weight: 700; color: var(--text-hi); letter-spacing: -0.02em; }
+.header-sub { font-size: 10px; font-family: var(--mono); color: var(--text-dim); margin-top: 1px; letter-spacing: 0.04em; }
+
+/* ── STATUS HERO ── */
+.hero {
+  margin: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+.hero::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  opacity: 0.5;
+}
+.hero-inner { padding: 14px 16px; display: flex; align-items: center; gap: 14px; }
+.orb {
+  width: 46px; height: 46px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; position: relative;
+}
+.orb.working { background: var(--green-dim); border: 1px solid rgba(74,222,128,0.3); box-shadow: 0 0 18px rgba(74,222,128,0.12); }
+.orb.broken  { background: var(--red-dim);   border: 1px solid rgba(248,113,113,0.3); }
+.orb.unknown { background: var(--amber-dim); border: 1px solid rgba(251,191,36,0.3); }
+.orb-ring {
+  position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid transparent;
+}
+.orb.working .orb-ring {
+  border-color: rgba(74,222,128,0.2);
+  animation: orbpulse 2.5s ease-in-out infinite;
+}
+@keyframes orbpulse {
+  0%,100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(1.15); opacity: 0; }
+}
+.orb svg { width: 20px; height: 20px; position: relative; z-index: 1; }
+.hero-text { flex: 1; }
+.hero-label { font-size: 10px; font-family: var(--mono); color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 3px; }
+.hero-value { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.hero-value.working { color: var(--green); }
+.hero-value.broken  { color: var(--red); }
+.hero-value.unknown { color: var(--amber); }
+.hero-chips { display: flex; gap: 7px; margin-top: 9px; flex-wrap: wrap; }
+.chip {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 9px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 4px;
+  font-size: 9px; font-family: var(--mono); color: var(--text);
+}
+.chip b { color: var(--teal); }
+.hero-refresh {
+  background: var(--green-dim); border: 1px solid rgba(74,222,128,0.3);
+  border-radius: 7px; color: var(--green);
+  padding: 7px 11px; font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; flex-shrink: 0;
+  transition: opacity .2s;
+}
+.hero-refresh:active { opacity: 0.5; }
+
+/* ── SECTION LABEL ── */
+.sec {
+  font-size: 9px; font-family: var(--mono);
+  text-transform: uppercase; letter-spacing: 0.14em; color: var(--text-dim);
+  padding: 18px 16px 7px;
+  display: flex; align-items: center; gap: 8px;
+}
+.sec::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.sec-ico { color: var(--blue); opacity: 0.7; }
+
+
+/* ── USER CERT CARDS ── */
+.cert-list { padding: 0 16px; display: flex; flex-direction: column; gap: 7px; }
+.cert-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 13px;
+  display: flex; align-items: center; gap: 11px;
+}
+.cert-ico {
+  width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface2); border: 1px solid var(--border2);
+}
+.cert-ico svg { width: 15px; height: 15px; }
+.cert-body { flex: 1; min-width: 0; }
+.cert-cn { font-size: 13px; font-weight: 700; color: var(--text-hi); margin-bottom: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cert-org { font-size: 9px; font-family: var(--mono); color: var(--text-dim); margin-bottom: 5px; }
+.cert-meta { display: flex; flex-direction: column; gap: 2px; }
+.cert-row { font-size: 9px; font-family: var(--mono); color: var(--text-dim); }
+.cert-row b { color: var(--text); }
+.cert-valid { color: var(--green) !important; }
+.cert-expired { color: var(--red) !important; }
+.cert-empty {
+  font-size: 11px; font-family: var(--mono); color: var(--text-dim);
+  text-align: center; padding: 18px; letter-spacing: 0.05em;
+}
+.sec-refresh {
+  background: var(--blue-dim); border: 1px solid rgba(59,130,246,0.3);
+  border-radius: 5px; color: var(--blue);
+  padding: 4px 9px; font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+  transition: opacity .2s; margin-left: auto;
+}
+.sec-refresh:active { opacity: 0.5; }
+
+/* ── SETTING CARDS ── */
+.cards { padding: 0 16px; display: flex; flex-direction: column; gap: 7px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 12px 13px;
+  display: flex; align-items: center; gap: 11px;
+  transition: border-color .2s;
+}
+.card-ico {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.card-ico svg { width: 15px; height: 15px; }
+.card-body { flex: 1; min-width: 0; }
+.card-name { font-size: 13px; font-weight: 700; color: var(--text-hi); margin-bottom: 2px; }
+.card-desc { font-size: 9px; font-family: var(--mono); color: var(--text-dim); letter-spacing: 0.03em; }
+.card-runtime { display: flex; align-items: center; gap: 5px; margin-top: 5px; }
+.rdot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; transition: background .3s;
+}
+.rdot.running { background: var(--green); box-shadow: 0 0 5px var(--green); animation: pg 2s ease-in-out infinite; }
+.rdot.dead    { background: var(--red);   box-shadow: 0 0 4px var(--red); }
+.rdot.unknown { background: var(--amber); }
+@keyframes pg { 0%,100% { box-shadow: 0 0 3px var(--green); } 50% { box-shadow: 0 0 8px var(--green); } }
+.rlabel { font-size: 9px; font-family: var(--mono); color: var(--text-dim); letter-spacing: 0.03em; }
+.rlabel b { color: var(--text-hi); }
+.badge {
+  font-size: 9px; font-family: var(--mono); padding: 2px 6px;
+  border-radius: 3px; font-weight: 700; display: inline-block; margin-top: 4px;
+}
+.badge.on  { background: var(--green-dim); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+.badge.off { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(248,113,113,0.2); }
+.badge.neu { background: var(--amber-dim); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+
+/* log-level select */
+.log-select {
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 6px; color: var(--text-hi); font-family: var(--mono);
+  font-size: 11px; padding: 5px 8px; cursor: pointer;
+  -webkit-appearance: none; flex-shrink: 0;
+}
+.spinner {
+  width: 15px; height: 15px; border: 2px solid var(--border2);
+  border-top-color: var(--blue); border-radius: 50%;
+  animation: spin .6s linear infinite; display: none; flex-shrink: 0;
+}
+.card.loading .spinner { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── ACTIONS ── */
+.actions { padding: 0 16px; display: flex; gap: 7px; flex-wrap: wrap; }
+.action-btn {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 12px 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; color: var(--text);
+  font-family: var(--mono); font-size: 9px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  cursor: pointer; transition: opacity .2s;
+  position: relative; overflow: hidden;
+}
+.action-btn svg { width: 17px; height: 17px; }
+.action-btn:active { opacity: 0.5; }
+.action-btn.blue  { border-color: rgba(59,130,246,0.3);  color: var(--blue); }
+.action-btn.teal  { border-color: rgba(45,212,191,0.3);  color: var(--teal); }
+.action-btn.amber { border-color: rgba(251,191,36,0.3);  color: var(--amber); }
+.action-btn.red   { border-color: rgba(248,113,113,0.3); color: var(--red); }
+.action-btn:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
+.action-btn.running  { opacity: 0.8; pointer-events: none; }
+.btn-spinner {
+  display: none; width: 17px; height: 17px;
+  border: 2px solid transparent; border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+.action-btn.running .btn-ico     { display: none; }
+.action-btn.running .btn-spinner { display: block; }
+.action-btn.blue.running   .btn-spinner { border-top-color: var(--blue); }
+.action-btn.teal.running   .btn-spinner { border-top-color: var(--teal); }
+.action-btn.amber.running  .btn-spinner { border-top-color: var(--amber); }
+.btn-label { font-size: 8px; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; text-align: center; line-height: 1.3; }
+
+/* ── LOGS ── */
+.log-wrap { margin: 0 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.log-toolbar {
+  padding: 9px 13px 8px; border-bottom: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.log-row { display: flex; align-items: center; gap: 7px; }
+.log-title { font-size: 9px; font-family: var(--mono); color: var(--text); font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; flex-shrink: 0; min-width: 72px; }
+.filter-btn {
+  padding: 3px 7px; background: transparent; border: 1px solid var(--border2);
+  border-radius: 4px; font-family: var(--mono); font-size: 9px; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.06em; transition: all .15s;
+}
+.filter-btn.info  { color: var(--blue); }
+.filter-btn.warn  { color: var(--amber); }
+.filter-btn.error { color: var(--red); }
+.filter-btn.debug { color: var(--text-dim); }
+.filter-btn.active.info  { background: var(--blue-dim);  border-color: rgba(59,130,246,0.35); }
+.filter-btn.active.warn  { background: var(--amber-dim); border-color: rgba(251,191,36,0.35); }
+.filter-btn.active.error { background: var(--red-dim);   border-color: rgba(248,113,113,0.35); }
+.filter-btn.active.debug { background: rgba(148,163,184,0.08); border-color: rgba(148,163,184,0.2); color: var(--text); }
+.log-refresh-btn {
+  margin-left: auto; background: var(--green-dim); border: 1px solid rgba(74,222,128,0.3);
+  border-radius: 5px; color: var(--green); padding: 3px 9px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer;
+}
+.log-refresh-btn:active { opacity: 0.5; }
+.log-size {
+  font-size: 9px; font-family: var(--mono); color: var(--amber);
+  padding: 2px 7px; background: var(--amber-dim);
+  border: 1px solid rgba(251,191,36,0.3); border-radius: 4px; white-space: nowrap;
+}
+.log-size.warn { color: var(--red); background: var(--red-dim); border-color: rgba(248,113,113,0.3); }
+.log-clear {
+  background: transparent; border: 1px solid rgba(248,113,113,0.2);
+  border-radius: 5px; color: var(--red); padding: 3px 8px;
+  font-family: var(--mono); font-size: 9px; cursor: pointer;
+  display: flex; align-items: center; gap: 4px; transition: opacity .15s;
+}
+.log-clear:active { opacity: 0.5; }
+.log-body {
+  font-family: var(--mono); font-size: 10px; line-height: 1.7;
+  padding: 9px 13px;
+  height: 260px; min-height: 260px;
+  overflow-y: scroll; -webkit-overflow-scrolling: touch;
+  color: var(--text);
+}
+.log-body::-webkit-scrollbar { width: 3px; }
+.log-body::-webkit-scrollbar-track { background: transparent; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.log-line { display: block; white-space: pre-wrap; word-break: break-all; }
+.log-line.INFO  { color: var(--text); }
+.log-line.WARN  { color: var(--amber); }
+.log-line.ERROR { color: var(--red); }
+.log-line.DEBUG { color: var(--text-dim); }
+.log-empty { color: var(--text-dim); font-size: 10px; font-family: var(--mono); padding: 20px 0; text-align: center; display: block; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--surface2); border: 1px solid var(--border2);
+  border-radius: 8px; padding: 8px 16px;
+  font-size: 12px; font-family: var(--mono); color: var(--text-hi);
+  opacity: 0; transition: all .2s; pointer-events: none;
+  white-space: nowrap; z-index: 100;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.ok  { border-color: rgba(74,222,128,0.35); color: var(--green); }
+.toast.err { border-color: rgba(248,113,113,0.35); color: var(--red); }
+.toast.inf { border-color: rgba(59,130,246,0.35);  color: var(--blue); }
+
+/* ── FOOTER ── */
+.footer { text-align: center; padding: 24px 16px 4px; font-size: 9px; font-family: var(--mono); color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+.footer a { color: var(--blue); text-decoration: none; }
+
+/* ── TOGGLE SWITCH (v3) ── */
+.switch {
+  position: relative; width: 44px; height: 25px; border-radius: 13px;
+  background: var(--surface2); border: 1px solid var(--border2);
+  cursor: pointer; flex-shrink: 0; transition: background .2s, border-color .2s;
+}
+.switch::after {
+  content: ''; position: absolute; top: 3px; left: 3px;
+  width: 17px; height: 17px; border-radius: 50%;
+  background: var(--text-dim); transition: left .2s, background .2s;
+}
+.switch.on { background: var(--teal-dim); border-color: rgba(45,212,191,0.45); }
+.switch.on::after { left: 22px; background: var(--teal); }
+.switch.busy { opacity: 0.4; pointer-events: none; }
+
+.orb.partial { background: var(--amber-dim); border: 1px solid rgba(251,191,36,0.3); }
+.hero-value.partial { color: var(--amber); }
+
+/* ── HINT ROW ── */
+.hint {
+  margin: 0 16px; padding: 9px 12px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 9px; font-family: var(--mono); color: var(--text-dim);
+  line-height: 1.6; word-break: break-all;
+}
+.hint b { color: var(--text); }
+
+.cert-tag {
+  font-size: 8px; font-family: var(--mono); padding: 1px 5px;
+  border-radius: 3px; margin-left: 6px; vertical-align: middle;
+}
+.cert-tag.user   { background: var(--blue-dim);  color: var(--blue);  border: 1px solid rgba(59,130,246,0.25); }
+.cert-tag.custom { background: var(--teal-dim);  color: var(--teal);  border: 1px solid rgba(45,212,191,0.25); }
+.cert-tag.off    { background: var(--red-dim);   color: var(--red);   border: 1px solid rgba(248,113,113,0.25); }
+
+.fatal {
+  margin: 40px 16px; padding: 18px;
+  background: var(--red-dim); border: 1px solid rgba(248,113,113,0.35);
+  border-radius: 10px; color: var(--red);
+  font-family: var(--mono); font-size: 11px; line-height: 1.7;
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="shield">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.8">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+    <div>
+      <div class="header-title">TrustUserCerts</div>
+      <div class="header-sub" id="headerSub">Magisk · KSU · APatch</div>
+    </div>
+  </div>
+</div>
+
+<!-- STATUS HERO -->
+<div class="hero">
+  <div class="hero-inner">
+    <div class="orb unknown" id="statusOrb">
+      <div class="orb-ring"></div>
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" id="statusIcon">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="var(--amber)"/>
+      </svg>
+    </div>
+    <div class="hero-text">
+      <div class="hero-label" id="statusLabel">module status</div>
+      <div class="hero-value unknown" id="statusValue">checking…</div>
+      <div class="hero-chips">
+        <div class="chip" id="chipStore">store <b id="certCount">—</b></div>
+        <div class="chip">user certs <b id="userCount">—</b></div>
+        <div class="chip">fail counter <b id="failCount">—</b></div>
+      </div>
+    </div>
+    <button class="hero-refresh" onclick="refreshAll()">REFRESH</button>
+  </div>
+</div>
+
+<!-- USER CERTIFICATES -->
+<div class="sec"><span class="sec-ico">🔒</span> certificates<button class="sec-refresh" onclick="refreshCerts()">REFRESH</button></div>
+<div class="cert-list" id="certList">
+  <div class="cert-empty">loading…</div>
+</div>
+
+<!-- SETTINGS -->
+<div class="sec"><span class="sec-ico">⚙</span> settings</div>
+<div class="cards">
+
+  <div class="card" id="card-livesync">
+    <div class="card-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="1.8">
+        <polyline points="1 4 1 10 7 10"/>
+        <path d="M3.51 15a9 9 0 1 0 .49-3"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <div class="card-name">Live Sync</div>
+      <div class="card-desc" id="livesyncModeLabel">watches the user cert store</div>
+      <div class="card-runtime">
+        <span class="rdot unknown" id="livesync-dot"></span>
+        <span class="rlabel" id="livesync-label">checking…</span>
+      </div>
+    </div>
+    <div class="switch" id="sw-livesync" onclick="toggleLiveSync()"></div>
+  </div>
+
+  <div class="card" id="card-loglevel">
+    <div class="card-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.8">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/>
+        <line x1="16" y1="17" x2="8" y2="17"/>
+      </svg>
+    </div>
+    <div class="card-body">
+      <div class="card-name">Log Level</div>
+      <div class="card-desc">0 = off · 1 = normal · 2 = verbose</div>
+    </div>
+    <div class="spinner"></div>
+    <select class="log-select" id="sel-loglevel" onchange="handleLogLevel()">
+      <option value="0">0 · off</option>
+      <option value="1" selected>1 · normal</option>
+      <option value="2">2 · verbose</option>
+    </select>
+  </div>
+
+</div>
+
+<!-- ACTIONS -->
+<div class="sec"><span class="sec-ico">▶</span> actions</div>
+<div class="actions">
+
+  <button class="action-btn teal" id="btn-inject" onclick="doAction('inject')">
+    <span class="btn-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <polyline points="8 11 10 13 16 8"/>
+      </svg>
+    </span>
+    <span class="btn-spinner"></span>
+    <span class="btn-label">Force<br>Inject</span>
+  </button>
+
+  <button class="action-btn blue" id="btn-sync" onclick="doAction('sync')">
+    <span class="btn-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <polyline points="1 4 1 10 7 10"/>
+        <path d="M3.51 15a9 9 0 1 0 .49-3"/>
+      </svg>
+    </span>
+    <span class="btn-spinner"></span>
+    <span class="btn-label">Force<br>Sync</span>
+  </button>
+
+  <button class="action-btn amber" id="btn-reset" onclick="doAction('reset')">
+    <span class="btn-ico">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+      </svg>
+    </span>
+    <span class="btn-spinner"></span>
+    <span class="btn-label">Reset<br>Fail Ctr</span>
+  </button>
+
+</div>
+
+<!-- CUSTOM CERT HINT -->
+<div class="sec"><span class="sec-ico">＋</span> custom certificates</div>
+<div class="hint" id="customHint">
+  Drop <b>&lt;subject_hash_old&gt;.0</b> files into <b id="customDir">/data/adb/trust-user-certs/certs</b>,
+  then hit Force Inject. The directory is root-only.
+</div>
+
+<!-- LOGS -->
+<div class="sec"><span class="sec-ico">▤</span> service log</div>
+<div class="log-wrap">
+  <div class="log-toolbar">
+    <div class="log-row">
+      <span class="log-title">service.log</span>
+      <button class="filter-btn info  active" id="f-info"  onclick="toggleFilter('INFO')">INFO</button>
+      <button class="filter-btn warn  active" id="f-warn"  onclick="toggleFilter('WARN')">WARN</button>
+      <button class="filter-btn error active" id="f-error" onclick="toggleFilter('ERROR')">ERR</button>
+      <button class="filter-btn debug"        id="f-debug" onclick="toggleFilter('DEBUG')">DBG</button>
+      <button class="log-refresh-btn" onclick="loadLogs()">REFRESH</button>
+    </div>
+    <div class="log-row">
+      <span class="log-size" id="logSize">— B</span>
+      <button class="log-clear" onclick="clearLog()">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-1 14H6L5 6"/>
+          <path d="M10 11v6M14 11v6M9 6V4h6v2"/>
+        </svg>
+        clear
+      </button>
+    </div>
+  </div>
+  <div class="log-body" id="logBody">
+    <span class="log-empty">loading…</span>
+  </div>
+</div>
+
+<!-- JUST TRUST ME PRO TIP -->
+<div class="sec"><span class="sec-ico">🔓</span> ssl unpinning</div>
+<div style="padding: 0 16px 20px;">
+  <a href="https://github.com/hang666/JustTrustMePro/releases" target="_blank" style="text-decoration: none; display: block;">
+    <div style="
+      background: var(--surface);
+      border: 1px solid rgba(251,191,36,0.25);
+      border-radius: 10px;
+      padding: 14px 13px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color .2s;
+      cursor: pointer;
+    ">
+      <div style="
+        width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0;
+        background: var(--amber-dim);
+        border: 1px solid rgba(251,191,36,0.3);
+        display: flex; align-items: center; justify-content: center;
+      ">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.8">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+        </svg>
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-size: 13px; font-weight: 700; color: var(--text-hi); margin-bottom: 2px;">JustTrustMePro</div>
+        <div style="font-size: 9px; font-family: var(--mono); color: var(--text-dim); letter-spacing: 0.03em;">for full ssl unpinning · xposed module</div>
+        <div style="margin-top: 5px; display: flex; align-items: center; gap: 5px;">
+          <span style="
+            font-size: 9px; font-family: var(--mono); padding: 2px 7px;
+            background: var(--amber-dim); color: var(--amber);
+            border: 1px solid rgba(251,191,36,0.25); border-radius: 3px; font-weight: 700;
+          ">RECOMMENDED</span>
+        </div>
+      </div>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" style="flex-shrink:0; opacity:0.6;">
+        <line x1="7" y1="17" x2="17" y2="7"/>
+        <polyline points="7 7 17 7 17 17"/>
+      </svg>
+    </div>
+  </a>
+</div>
+
+<div class="footer">trust-user-certs v3 · <a href="https://github.com/nikakvo" target="_blank">Tears Burn →</a></div>
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+var MODULE_DIR = '/data/adb/modules/trust-user-certs';
+var SERVICE_SH = MODULE_DIR + '/service.sh';
+
+// ── Root bridge ──────────────────────────────────────────────────────────────
+// KernelSU / SukiSU / APatch / MMRL expose ksu.exec in two different shapes:
+//   ksu.exec(cmd)                        -> String (only the LAST line survives)
+//   ksu.exec(cmd, optionsJson, cbName)   -> void, result via window[cbName]
+// v2 assumed the first one existed and silently did nothing where it did not,
+// which is why most buttons appeared dead. We probe once and use whatever works.
+var EXEC_MODE = null;
+var _cbSeq = 0;
+// Resolved by service.sh --b64cmd at startup: on a ROM whose toybox lacks
+// base64 this becomes "<busybox> base64" instead.
+var B64_CMD = 'base64';
+
+function hasBridge() {
+  return typeof ksu !== 'undefined' && ksu && typeof ksu.exec === 'function';
+}
+
+function callbackExec(cmd, timeoutMs) {
+  return new Promise(function (resolve, reject) {
+    var name = '__tuc_cb_' + (++_cbSeq) + '_' + Date.now();
+    var settled = false;
+    window[name] = function (errno, stdout, stderr) {
+      if (settled) return;
+      settled = true;
+      try { delete window[name]; } catch (e) { window[name] = undefined; }
+      resolve({
+        errno: typeof errno === 'number' ? errno : 0,
+        stdout: stdout == null ? '' : String(stdout),
+        stderr: stderr == null ? '' : String(stderr)
+      });
+    };
+    try {
+      ksu.exec(cmd, '{}', name);
+    } catch (e) {
+      settled = true;
+      try { delete window[name]; } catch (e2) {}
+      reject(e);
+      return;
+    }
+    setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      try { delete window[name]; } catch (e) {}
+      reject(new Error('exec timeout'));
+    }, timeoutMs || 60000);
+  });
+}
+
+function legacyExec(cmd) {
+  var r = ksu.exec(cmd);
+  var out = typeof r === 'string' ? r : (r && r.stdout) || '';
+  return { errno: 0, stdout: out, stderr: '' };
+}
+
+async function detectExecMode() {
+  if (!hasBridge()) throw new Error('no root bridge');
+  try {
+    var r = await callbackExec('echo tuc_ok', 3000);
+    if ((r.stdout || '').indexOf('tuc_ok') >= 0) return 'callback';
+  } catch (e) { /* fall through */ }
+  try {
+    var l = legacyExec('echo tuc_ok');
+    if ((l.stdout || '').indexOf('tuc_ok') >= 0) return 'legacy';
+  } catch (e) { /* fall through */ }
+  throw new Error('root shell unavailable');
+}
+
+async function rawExec(cmd, timeoutMs) {
+  if (EXEC_MODE === 'callback') return callbackExec(cmd, timeoutMs);
+  if (EXEC_MODE === 'legacy') return legacyExec(cmd);
+  throw new Error('exec not ready');
+}
+
+// Every command goes through base64 so multi-line output survives the legacy
+// bridge, which only ever returns the last line.
+async function sh(cmd, timeoutMs) {
+  var wrapped = '{ ' + cmd + '; } 2>&1 | ' + B64_CMD + ' | tr -d "\\n\\r"';
+  var res = await rawExec(wrapped, timeoutMs);
+  return b64ToText((res.stdout || '').trim());
+}
+
+function b64ToText(b64) {
+  if (!b64) return '';
+  try {
+    var bin = atob(b64);
+    var bytes = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch (e) {
+    return '';
+  }
+}
+
+function svc(args, timeoutMs) {
+  return sh('sh ' + SERVICE_SH + ' ' + args, timeoutMs);
+}
+
+function parseKV(text) {
+  var out = {};
+  (text || '').split('\n').forEach(function (line) {
+    var eq = line.indexOf('=');
+    if (eq > 0) out[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+  });
+  return out;
+}
+
+// ── Escaping (a certificate CN is attacker-controlled text) ──────────────────
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+var _toastTimer;
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function () { t.className = 'toast'; }, 2600);
+}
+
+function fatal(msg) {
+  document.body.innerHTML =
+    '<div class="fatal"><b>TrustUserCerts</b><br><br>' + esc(msg) +
+    '<br><br>This WebUI needs a root manager that provides the ksu JavaScript ' +
+    'bridge (KernelSU, SukiSU, APatch or MMRL). Plain Magisk has no built-in WebUI.</div>';
+}
+
+// ── Time helper (uses the device clock reported by --status) ─────────────────
+var DEVICE_NOW = 0;
+function fmtAgo(ts) {
+  var t = parseInt(ts, 10);
+  if (!t) return '—';
+  var now = DEVICE_NOW || Math.floor(Date.now() / 1000);
+  var diff = now - t;
+  if (diff < 0) diff = 0;
+  if (diff < 5) return 'just now';
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+  return Math.floor(diff / 86400) + 'd ago';
+}
+
+function fmtBytes(n) {
+  var b = parseInt(n, 10) || 0;
+  if (b < 1024) return b + ' B';
+  if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+  return (b / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+// ── Status ───────────────────────────────────────────────────────────────────
+var STATUS = {};
+
+async function refreshStatus() {
+  var st;
+  try {
+    st = parseKV(await svc('--status', 30000));
+  } catch (e) {
+    showToast('Status failed: ' + (e.message || e), 'err');
+    return;
+  }
+  if (!st.SDK) {
+    showToast('service.sh did not answer', 'err');
+    return;
+  }
+  STATUS = st;
+  DEVICE_NOW = parseInt(st.NOW, 10) || 0;
+
+  var orb = document.getElementById('statusOrb');
+  var val = document.getElementById('statusValue');
+  var icon = document.getElementById('statusIcon').querySelector('path');
+
+  var mounted = st.MOUNTED === '1';
+  var users = parseInt(st.USER_CERTS, 10) || 0;
+  var trusted = parseInt(st.USER_TRUSTED, 10) || 0;
+  var excluded = parseInt(st.USER_EXCLUDED, 10) || 0;
+  var expected = users - excluded;          // certs dropped by an exclusion rule don't count
+  var storeN = parseInt(st.STORE_CERTS, 10) || 0;
+  var blocked = st.BLOCKED === '1';
+
+  var state, text;
+  if (blocked) {
+    state = 'partial';
+    text = 'BLOCKED';
+    document.getElementById('statusLabel').textContent = 'bootloop guard active';
+  } else if (mounted && storeN > 0 && trusted === expected) {
+    state = 'working';
+    text = expected > 0 ? 'WORKING' : 'READY';
+    document.getElementById('statusLabel').textContent = 'module status';
+  } else if (mounted && storeN > 0) {
+    state = 'partial';
+    text = 'PARTIAL';
+    document.getElementById('statusLabel').textContent = trusted + '/' + expected + ' user certs trusted';
+  } else {
+    state = 'broken';
+    text = 'NOT WORKING';
+    document.getElementById('statusLabel').textContent = 'trust store is not overlaid';
+  }
+
+  var colorVar = state === 'working' ? 'var(--green)' : (state === 'broken' ? 'var(--red)' : 'var(--amber)');
+  orb.className = 'orb ' + state;
+  val.className = 'hero-value ' + state;
+  val.textContent = text;
+  icon.setAttribute('stroke', colorVar);
+
+  document.getElementById('certCount').textContent = storeN;
+  document.getElementById('userCount').textContent =
+    users > 0 ? (trusted + '/' + expected + (excluded > 0 ? ' +' + excluded + 'x' : '')) : '0';
+  document.getElementById('failCount').textContent = (st.FAIL || '0') + '/' + (st.FAIL_LIMIT || '3');
+  document.getElementById('chipStore').firstChild.textContent =
+    (parseInt(st.SDK, 10) >= 34 ? 'apex ' : 'system ');
+
+  var sub = (st.VERSION || 'v3') + ' · SDK ' + st.SDK;
+  if (st.STORE_DIR) sub += ' · ' + (parseInt(st.SDK, 10) >= 34 ? 'apex' : 'tmpfs');
+  document.getElementById('headerSub').textContent = sub;
+
+  if (st.CUSTOM_DIR) document.getElementById('customDir').textContent = st.CUSTOM_DIR;
+
+  renderLiveSync(st);
+  renderLogLevel(st);
+  renderLogSize(st.LOG_SIZE);
+}
+
+// ── Live Sync card ───────────────────────────────────────────────────────────
+function renderLiveSync(st) {
+  var enabled = st.LIVE_SYNC === '1';
+  var sw = document.getElementById('sw-livesync');
+  sw.className = 'switch' + (enabled ? ' on' : '');
+
+  var dot = document.getElementById('livesync-dot');
+  var label = document.getElementById('livesync-label');
+  var mode = st.WATCH_MODE || '';
+  var syncs = parseInt(st.LIVESYNCS, 10) || 0;
+
+  document.getElementById('livesyncModeLabel').textContent =
+    mode ? (mode === 'poll' ? 'polling every 30s' : 'event-driven (inotify)')
+         : 'watches the user cert store';
+
+  if (st.WATCHER === 'running') {
+    dot.className = 'rdot running';
+    var info = '<b>RUNNING</b> · pid ' + esc(st.WATCHER_PID);
+    info += syncs > 0
+      ? ' · ' + syncs + ' sync' + (syncs > 1 ? 's' : '') + ' · last ' + esc(fmtAgo(st.LAST_SYNC))
+      : ' · no syncs yet';
+    label.innerHTML = info;
+  } else if (st.WATCHER === 'disabled') {
+    dot.className = 'rdot unknown';
+    label.innerHTML = '<b>DISABLED</b> · certs sync on reboot only';
+  } else {
+    dot.className = 'rdot dead';
+    label.innerHTML = '<b>DEAD</b> · press Force Sync to restart it';
+  }
+}
+
+async function toggleLiveSync() {
+  var sw = document.getElementById('sw-livesync');
+  if (sw.classList.contains('busy')) return;
+  var turningOn = !sw.classList.contains('on');
+  sw.classList.add('busy');
+  try {
+    var out = parseKV(await svc('--config LIVE_SYNC ' + (turningOn ? '1' : '0'), 40000));
+    if (out.rc === '0') {
+      showToast(turningOn ? 'Live Sync started' : 'Live Sync stopped', 'ok');
+    } else {
+      showToast('Live Sync ' + (turningOn ? 'failed to start' : 'stop failed'), 'err');
+    }
+  } catch (e) {
+    showToast('Error: ' + (e.message || e), 'err');
+  }
+  sw.classList.remove('busy');
+  await refreshStatus();
+}
+
+// ── Log level ────────────────────────────────────────────────────────────────
+function renderLogLevel(st) {
+  var sel = document.getElementById('sel-loglevel');
+  if (st.LOG_LEVEL === '0' || st.LOG_LEVEL === '1' || st.LOG_LEVEL === '2') {
+    sel.value = st.LOG_LEVEL;
+  }
+  document.getElementById('card-loglevel').classList.remove('loading');
+}
+
+async function handleLogLevel() {
+  var sel = document.getElementById('sel-loglevel');
+  var card = document.getElementById('card-loglevel');
+  card.classList.add('loading');
+  try {
+    var out = parseKV(await svc('--config LOG_LEVEL ' + sel.value, 20000));
+    showToast(out.rc === '0' ? 'Log level → ' + sel.value : 'Could not write config',
+              out.rc === '0' ? 'ok' : 'err');
+  } catch (e) {
+    showToast('Error: ' + (e.message || e), 'err');
+  }
+  card.classList.remove('loading');
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────────
+var ACTION_IDS = ['btn-inject', 'btn-sync', 'btn-reset'];
+
+function lockBtns(activeId) {
+  ACTION_IDS.forEach(function (id) {
+    var b = document.getElementById(id);
+    if (!b) return;
+    b.disabled = true;
+    if (id === activeId) b.classList.add('running');
+  });
+}
+
+function unlockBtns() {
+  ACTION_IDS.forEach(function (id) {
+    var b = document.getElementById(id);
+    if (!b) return;
+    b.disabled = false;
+    b.classList.remove('running');
+  });
+}
+
+async function doAction(type) {
+  var btn = document.getElementById('btn-' + type);
+  if (!btn || btn.disabled) return;
+  lockBtns('btn-' + type);
+  try {
+    var out;
+    if (type === 'inject') {
+      out = parseKV(await svc('--force-inject', 120000));
+      showToast(out.rc === '0' ? 'Inject verified' : 'Inject failed — check the log',
+                out.rc === '0' ? 'ok' : 'err');
+    } else if (type === 'sync') {
+      out = parseKV(await svc('--sync', 120000));
+      if (out.rc === '0' && out.watcher === 'restarted') {
+        showToast('Sync complete · watcher restarted', 'ok');
+      } else {
+        showToast(out.rc === '0' ? 'Sync complete' : 'Sync failed — check the log',
+                  out.rc === '0' ? 'ok' : 'err');
+      }
+    } else if (type === 'reset') {
+      out = parseKV(await svc('--reset-fail', 20000));
+      showToast('Fail counter reset', 'ok');
+    }
+  } catch (e) {
+    showToast('Error: ' + (e.message || e), 'err');
+  }
+  unlockBtns();
+  await refreshStatus();
+  await refreshCerts();
+  await loadLogs();
+}
+
+// ── Logs ─────────────────────────────────────────────────────────────────────
+var activeFilters = new Set(['INFO', 'WARN', 'ERROR']);
+var rawLines = [];
+
+function toggleFilter(level) {
+  var ids = { INFO: 'f-info', WARN: 'f-warn', ERROR: 'f-error', DEBUG: 'f-debug' };
+  var btn = document.getElementById(ids[level]);
+  if (activeFilters.has(level)) {
+    activeFilters.delete(level);
+    btn.classList.remove('active');
+  } else {
+    activeFilters.add(level);
+    btn.classList.add('active');
+  }
+  renderLogs();
+}
+
+function renderLogSize(bytes) {
+  var el = document.getElementById('logSize');
+  var b = parseInt(bytes, 10) || 0;
+  el.textContent = fmtBytes(b);
+  el.className = b > 256 * 1024 ? 'log-size warn' : 'log-size';
+}
+
+async function loadLogs() {
+  try {
+    var raw = await svc('--log 400', 30000);
+    rawLines = raw ? raw.split('\n') : [];
+    renderLogs();
+  } catch (e) {
+    document.getElementById('logBody').innerHTML =
+      '<span class="log-empty">could not read the log file</span>';
+  }
+}
+
+function renderLogs() {
+  var body = document.getElementById('logBody');
+  if (!rawLines.length) {
+    body.innerHTML = '<span class="log-empty">no log entries</span>';
+    return;
+  }
+  var levels = ['INFO', 'WARN', 'ERROR', 'DEBUG'];
+  var filtered = rawLines.filter(function (line) {
+    var t = line.trim();
+    if (t === '' || t.indexOf('===') === 0) return true;
+    for (var i = 0; i < levels.length; i++) {
+      if (line.indexOf('[' + levels[i] + ']') >= 0) return activeFilters.has(levels[i]);
+    }
+    return true;
+  });
+
+  if (!filtered.length) {
+    body.innerHTML = '<span class="log-empty">no entries match the current filters</span>';
+    return;
+  }
+
+  body.innerHTML = filtered.map(function (line) {
+    var cls = 'INFO';
+    if (line.indexOf('[WARN]') >= 0) cls = 'WARN';
+    if (line.indexOf('[ERROR]') >= 0) cls = 'ERROR';
+    if (line.indexOf('[DEBUG]') >= 0) cls = 'DEBUG';
+    return '<span class="log-line ' + cls + '">' + esc(line) + '</span>';
+  }).join('\n');
+
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () { body.scrollTop = body.scrollHeight; });
+  });
+}
+
+async function clearLog() {
+  if (!confirm('Clear the log file? This cannot be undone.')) return;
+  try {
+    await svc('--clear-log', 20000);
+    rawLines = [];
+    renderLogs();
+    renderLogSize(0);
+    showToast('Log cleared', 'ok');
+  } catch (e) {
+    showToast('Could not clear the log', 'err');
+  }
+}
+
+// ── ASN.1 DER parser (subject, validity, serial) ─────────────────────────────
+function derParseLen(d, pos) {
+  var l = d[pos];
+  if (l < 0x80) return [l, pos + 1];
+  var n = l & 0x7f;
+  var len = 0;
+  for (var i = 0; i < n; i++) len = (len * 256) + d[pos + 1 + i];
+  return [len, pos + 1 + n];
+}
+
+function derParseCert(b64) {
+  var bin = atob(b64.replace(/\s/g, ''));
+  var d = Uint8Array.from(bin, function (c) { return c.charCodeAt(0); });
+
+  var OID_MAP = {
+    '550403': 'CN', '55040a': 'O', '55040b': 'OU',
+    '550406': 'C', '550407': 'L', '550408': 'ST'
+  };
+
+  function parseSeqItems(data) {
+    var items = [], pos = 0;
+    while (pos < data.length) {
+      var tag = data[pos];
+      var r = derParseLen(data, pos + 1);
+      items.push({ tag: tag, val: data.slice(r[1], r[1] + r[0]) });
+      pos = r[1] + r[0];
+    }
+    return items;
+  }
+
+  function parseRDN(data) {
+    var fields = {}, pos = 0;
+    while (pos < data.length) {
+      if (data[pos] !== 0x31) break;
+      var s = derParseLen(data, pos + 1);
+      var setData = data.slice(s[1], s[1] + s[0]);
+      pos = s[1] + s[0];
+      if (setData[0] !== 0x30) continue;
+      var q = derParseLen(setData, 1);
+      var seqData = setData.slice(q[1], q[1] + q[0]);
+      if (seqData[0] !== 0x06) continue;
+      var o = derParseLen(seqData, 1);
+      var oidHex = Array.from(seqData.slice(o[1], o[1] + o[0]))
+        .map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+      var name = OID_MAP[oidHex];
+      if (!name) continue;
+      var vpos = o[1] + o[0];
+      var v = derParseLen(seqData, vpos + 1);
+      fields[name] = new TextDecoder('utf-8').decode(seqData.slice(v[1], v[1] + v[0]));
+    }
+    return fields;
+  }
+
+  function parseTime(val) {
+    var s = new TextDecoder().decode(val);
+    if (s.length === 13) {
+      var yy = parseInt(s.slice(0, 2), 10);
+      var year = yy < 50 ? 2000 + yy : 1900 + yy;
+      return year + '-' + s.slice(2, 4) + '-' + s.slice(4, 6);
+    }
+    return s.slice(0, 4) + '-' + s.slice(4, 6) + '-' + s.slice(6, 8);
+  }
+
+  var outer = d.slice(derParseLen(d, 1)[1]);
+  var tbsR = derParseLen(outer, 1);
+  var tbs = outer.slice(tbsR[1], tbsR[1] + tbsR[0]);
+
+  var items = parseSeqItems(tbs);
+  var idx = (items[0] && items[0].tag === 0xa0) ? 1 : 0;
+
+  var serial = Array.from(items[idx].val)
+    .map(function (b) { return b.toString(16).padStart(2, '0'); }).join(':').toUpperCase();
+
+  var subject = parseRDN(items[idx + 4].val);
+  var validity = items[idx + 3].val;
+
+  var v1 = derParseLen(validity, 1);
+  var notBefore = parseTime(validity.slice(v1[1], v1[1] + v1[0]));
+  var v2 = derParseLen(validity, v1[1] + v1[0] + 1);
+  var notAfter = parseTime(validity.slice(v2[1], v2[1] + v2[0]));
+
+  return {
+    cn: subject.CN || subject.O || 'Unknown',
+    o: subject.O || '',
+    serial: serial,
+    notBefore: notBefore,
+    notAfter: notAfter
+  };
+}
+
+// ── Certificates ─────────────────────────────────────────────────────────────
+async function refreshCerts() {
+  var list = document.getElementById('certList');
+  list.innerHTML = '<div class="cert-empty">loading…</div>';
+  var raw;
+  try {
+    raw = await svc('--certs', 60000);
+  } catch (e) {
+    list.innerHTML = '<div class="cert-empty">error reading certificates</div>';
+    return;
+  }
+
+  var lines = (raw || '').split('\n').filter(function (l) { return l.indexOf('|') > 0; });
+  if (!lines.length) {
+    list.innerHTML = '<div class="cert-empty">no user or custom certificates installed</div>';
+    return;
+  }
+
+  var today = new Date().toISOString().slice(0, 10);
+  var cards = [];
+
+  lines.forEach(function (line) {
+    var parts = line.split('|');
+    if (parts.length < 4) return;
+    var name = parts[0], source = parts[1], state = parts[2], b64 = parts[3];
+    var trusted = state === '1';
+    var ruled = state === 'x';
+    var cert;
+    try {
+      cert = derParseCert(b64);
+    } catch (e) {
+      cards.push(
+        '<div class="cert-card"><div class="cert-body">' +
+        '<div class="cert-cn">' + esc(name) + '</div>' +
+        '<div class="cert-row">could not be parsed as DER</div>' +
+        '</div></div>');
+      return;
+    }
+
+    var expired = cert.notAfter < today;
+    var stroke = expired ? 'var(--red)' : (trusted ? 'var(--green)' : 'var(--amber)');
+    var tag = '<span class="cert-tag ' + (source === 'custom' ? 'custom' : 'user') + '">' +
+              esc(source) + '</span>';
+    if (ruled) tag += '<span class="cert-tag off">excluded by rule</span>';
+    else if (!trusted) tag += '<span class="cert-tag off">not in store</span>';
+
+    cards.push(
+      '<div class="cert-card">' +
+        '<div class="cert-ico">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="' + stroke + '" stroke-width="1.8">' +
+            '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' +
+            (expired
+              ? '<line x1="8" y1="12" x2="16" y2="12" stroke="var(--red)"/>'
+              : '<polyline points="8 11 10 13 16 8"/>') +
+          '</svg>' +
+        '</div>' +
+        '<div class="cert-body">' +
+          '<div class="cert-cn">' + esc(cert.cn) + tag + '</div>' +
+          (cert.o && cert.o !== cert.cn ? '<div class="cert-org">' + esc(cert.o) + '</div>' : '') +
+          '<div class="cert-meta">' +
+            '<div class="cert-row">file &nbsp;<b>' + esc(name) + '</b></div>' +
+            '<div class="cert-row">valid from &nbsp;<b>' + esc(cert.notBefore) + '</b></div>' +
+            '<div class="cert-row">valid until &nbsp;<b class="' +
+              (expired ? 'cert-expired' : 'cert-valid') + '">' + esc(cert.notAfter) + '</b></div>' +
+            '<div class="cert-row">serial &nbsp;<b>' + esc(cert.serial) + '</b></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+  });
+
+  list.innerHTML = cards.length
+    ? cards.join('')
+    : '<div class="cert-empty">no user or custom certificates installed</div>';
+}
+
+// ── Refresh orchestration ────────────────────────────────────────────────────
+var _busy = false;
+async function refreshAll() {
+  if (_busy) return;
+  _busy = true;
+  try {
+    await refreshStatus();
+    await refreshCerts();
+    await loadLogs();
+  } finally {
+    _busy = false;
+  }
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+async function init() {
+  var waited = 0;
+  while (!hasBridge() && waited < 8000) {
+    await new Promise(function (r) { setTimeout(r, 250); });
+    waited += 250;
+  }
+  if (!hasBridge()) {
+    fatal('No root bridge found.');
+    return;
+  }
+  try {
+    EXEC_MODE = await detectExecMode();
+  } catch (e) {
+    fatal('Could not open a root shell: ' + (e.message || e));
+    return;
+  }
+  // Resolve the base64 command before any other call goes through sh().
+  try {
+    var probe = await rawExec('sh ' + SERVICE_SH + ' --b64cmd', 15000);
+    var line = (probe.stdout || '').trim().split('\n').pop().trim();
+    if (line) B64_CMD = line;
+  } catch (e) { /* keep the default */ }
+
+  // Edge-to-edge only: the layout draws behind the system bars (with safe-area
+  // padding above), but the bars themselves stay on screen. We deliberately do
+  // NOT call ksu.fullScreen(true) — that hides the clock and the navigation
+  // buttons until the user swipes, which is useless on 3-button navigation.
+  try { if (ksu.enableEdgeToEdge) ksu.enableEdgeToEdge(); } catch (e) {}
+  try { if (ksu.fullScreen) ksu.fullScreen(false); } catch (e) {}
+  await refreshAll();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && EXEC_MODE) refreshStatus();
+});
+
+setInterval(function () {
+  if (!document.hidden && EXEC_MODE && !_busy) refreshStatus();
+}, 30000);
+
+setInterval(function () {
+  if (!document.hidden && EXEC_MODE && !_busy) loadLogs();
+}, 45000);
+</script>
+</body>
+</html>
