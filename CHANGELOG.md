@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.1
+
+### Fixed — the Live Sync watcher could die with the manager app
+
+A watcher started from the WebUI (the Live Sync toggle) was a child of the
+manager app's root shell, so it inherited the app's cgroup. When Android froze
+or killed the manager, the watcher went with it and the UI showed `DEAD` until
+the next reboot. A watcher started at boot was unaffected, so this only bit
+people who used the toggle.
+
+- `run_watcher` now calls `daemon_detach()` first: it moves itself into the root
+  cgroup (`cpuctl`, `cpuset`, `stune`, `blkio`, `memcg`, unified
+  `cgroup.procs`) and sets `oom_score_adj` to -1000, so a UI-started watcher
+  behaves like a boot-started service.
+- **Force Sync** restarts the watcher when Live Sync is enabled but the process
+  is gone, and reports `watcher=restarted`.
+- The runtime line now points at Force Sync instead of telling you to toggle
+  Live Sync off and on.
+  
+---
+
 ## v3
 
 ### Fixed — critical
