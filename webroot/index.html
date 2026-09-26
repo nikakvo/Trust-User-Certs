@@ -69,6 +69,9 @@ body {
   flex-shrink: 0;
 }
 .shield svg { width: 18px; height: 18px; }
+.help-btn { background: transparent; border: 1px solid var(--border2); border-radius: 6px; color: var(--text); padding: 7px 11px; font-size: 11px; font-family: var(--mono); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; gap: 5px; }
+.help-btn:active { opacity: 0.5; }
+.help-btn svg { width: 13px; height: 13px; color: var(--blue); }
 .header-title { font-size: 15px; font-weight: 700; color: var(--text-hi); letter-spacing: -0.02em; }
 .header-sub { font-size: 10px; font-family: var(--mono); color: var(--text-dim); margin-top: 1px; letter-spacing: 0.04em; }
 
@@ -399,6 +402,14 @@ body {
       <div class="header-sub" id="headerSub">Magisk · KSU · APatch</div>
     </div>
   </div>
+  <button class="help-btn" onclick="openHelp()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/>
+      <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/>
+      <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    HELP
+  </button>
 </div>
 
 <!-- STATUS HERO -->
@@ -416,6 +427,7 @@ body {
       <div class="hero-chips">
         <div class="chip" id="chipStore">store <b id="certCount">—</b></div>
         <div class="chip">user certs <b id="userCount">—</b></div>
+        <div class="chip" id="chipCustom" style="display:none">custom <b id="customCount">—</b></div>
         <div class="chip">fail counter <b id="failCount">—</b></div>
       </div>
     </div>
@@ -518,8 +530,8 @@ body {
 <!-- CUSTOM CERT HINT -->
 <div class="sec"><span class="sec-ico">＋</span> custom certificates</div>
 <div class="hint" id="customHint">
-  Drop <b>&lt;subject_hash_old&gt;.0</b> files into <b id="customDir">/data/adb/trust-user-certs/certs</b>,
-  then hit Force Inject. The directory is root-only.
+  Drop <b>&lt;subject_hash_old&gt;.0</b> files into <b id="customDir">/data/adb/trust-user-certs/certs</b>.
+  Live Sync picks them up within seconds (without it: Force Inject). Root-only; removed on uninstall — keep a copy.
 </div>
 
 <!-- LOGS -->
@@ -598,7 +610,7 @@ body {
   </a>
 </div>
 
-<div class="footer">trust-user-certs v3 · <a href="https://github.com/nikakvo" target="_blank">Tears Burn →</a></div>
+<div class="footer">trust-user-certs · <a href="https://github.com/nikakvo" target="_blank">Tears Burn →</a></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -790,20 +802,28 @@ async function refreshStatus() {
   var expected = users - excluded;          // certs dropped by an exclusion rule don't count
   var storeN = parseInt(st.STORE_CERTS, 10) || 0;
   var blocked = st.BLOCKED === '1';
+  var cust = parseInt(st.CUSTOM_CERTS, 10) || 0;
+  var ctrusted = parseInt(st.CUSTOM_TRUSTED, 10) || 0;
+  var cexcluded = parseInt(st.CUSTOM_EXCLUDED, 10) || 0;
+  var cexpected = cust - cexcluded;
+  var userOk = trusted === expected;
+  var customOk = st.CUSTOM_TRUSTED === undefined || ctrusted === cexpected; // older service.sh
 
   var state, text;
   if (blocked) {
     state = 'partial';
     text = 'BLOCKED';
     document.getElementById('statusLabel').textContent = 'bootloop guard active';
-  } else if (mounted && storeN > 0 && trusted === expected) {
+  } else if (mounted && storeN > 0 && userOk && customOk) {
     state = 'working';
-    text = expected > 0 ? 'WORKING' : 'READY';
+    text = (expected + cexpected) > 0 ? 'WORKING' : 'READY';
     document.getElementById('statusLabel').textContent = 'module status';
   } else if (mounted && storeN > 0) {
     state = 'partial';
     text = 'PARTIAL';
-    document.getElementById('statusLabel').textContent = trusted + '/' + expected + ' user certs trusted';
+    document.getElementById('statusLabel').textContent = !userOk
+      ? trusted + '/' + expected + ' user certs trusted'
+      : ctrusted + '/' + cexpected + ' custom certs trusted';
   } else {
     state = 'broken';
     text = 'NOT WORKING';
@@ -819,11 +839,15 @@ async function refreshStatus() {
   document.getElementById('certCount').textContent = storeN;
   document.getElementById('userCount').textContent =
     users > 0 ? (trusted + '/' + expected + (excluded > 0 ? ' +' + excluded + 'x' : '')) : '0';
+  var chipC = document.getElementById('chipCustom');
+  chipC.style.display = (cust > 0 && st.CUSTOM_TRUSTED !== undefined) ? '' : 'none';
+  document.getElementById('customCount').textContent =
+    ctrusted + '/' + cexpected + (cexcluded > 0 ? ' +' + cexcluded + 'x' : '');
   document.getElementById('failCount').textContent = (st.FAIL || '0') + '/' + (st.FAIL_LIMIT || '3');
   document.getElementById('chipStore').firstChild.textContent =
     (parseInt(st.SDK, 10) >= 34 ? 'apex ' : 'system ');
 
-  var sub = (st.VERSION || 'v3') + ' · SDK ' + st.SDK;
+  var sub = (st.VERSION || 'v4') + ' · SDK ' + st.SDK;
   if (st.STORE_DIR) sub += ' · ' + (parseInt(st.SDK, 10) >= 34 ? 'apex' : 'tmpfs');
   document.getElementById('headerSub').textContent = sub;
 
@@ -846,12 +870,16 @@ function renderLiveSync(st) {
   var syncs = parseInt(st.LIVESYNCS, 10) || 0;
 
   document.getElementById('livesyncModeLabel').textContent =
-    mode ? (mode === 'poll' ? 'polling every 30s' : 'event-driven (inotify)')
-         : 'watches the user cert store';
+    mode === 'events' ? 'event-driven (busybox inotifyd)'
+    : mode === 'poll' ? 'polling every 30s'
+    : mode ? 'legacy watcher · reboot to switch to inotifyd'
+    : 'watches the user cert store';
 
   if (st.WATCHER === 'running') {
     dot.className = 'rdot running';
     var info = '<b>RUNNING</b> · pid ' + esc(st.WATCHER_PID);
+    var restarts = parseInt(st.WATCH_RESTARTS, 10) || 0;
+    if (mode === 'events' && restarts > 0) info += ' · ' + restarts + ' restart' + (restarts > 1 ? 's' : '');
     info += syncs > 0
       ? ' · ' + syncs + ' sync' + (syncs > 1 ? 's' : '') + ' · last ' + esc(fmtAgo(st.LAST_SYNC))
       : ' · no syncs yet';
@@ -1218,6 +1246,11 @@ async function refreshAll() {
   } finally {
     _busy = false;
   }
+}
+
+// ── Help page ────────────────────────────────────────────────────────────────
+function openHelp() {
+  window.location.href = 'help.html';
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────

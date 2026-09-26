@@ -14,7 +14,9 @@ esac
 . "$MODDIR/sh/common.sh"
 . "$MODDIR/sh/inject.sh"
 
-mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$CUSTOM_CERT_DIR" "$USER_CERT_DIR" 2>/dev/null
+# $USER_CERT_DIR is NOT created here: a root-owned cacerts-added stops Android
+# (KeyChain runs as uid system) from adding the first user certificate.
+mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$CUSTOM_CERT_DIR" 2>/dev/null
 
 _load_log_level
 log_rotate

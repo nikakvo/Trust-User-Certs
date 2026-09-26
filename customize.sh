@@ -7,7 +7,7 @@ SKIPUNZIP=0
 print_modname() {
   ui_print " "
   ui_print "****************************"
-  ui_print "   TrustUserCerts v3"
+  ui_print "   TrustUserCerts v4"
   ui_print "   Android 7 - 16"
   ui_print "   Magisk / KSU / APatch"
   ui_print "****************************"
@@ -26,25 +26,28 @@ on_install() {
   EXCLUDE_HASH_FILE="$DATA_DIR/exclude_hashes"
   EXCLUDE_SUBJ_FILE="$DATA_DIR/exclude_subjects"
 
-  # ── Stop a watcher left over from the previous version ────────────────────
-  if [ -f "$DATA_DIR/watcher.pid" ]; then
-    OLD_PID=$(cat "$DATA_DIR/watcher.pid" 2>/dev/null)
-    case "$OLD_PID" in
-      '' | *[!0-9]*) OLD_PID="" ;;
-    esac
-    if [ -n "$OLD_PID" ] && [ -d "/proc/$OLD_PID" ]; then
-      ui_print "- Stopping the running watcher (pid $OLD_PID)"
-      kill "$OLD_PID" 2>/dev/null
-      command -v pkill >/dev/null 2>&1 && pkill -P "$OLD_PID" 2>/dev/null
-    fi
-    rm -f "$DATA_DIR/watcher.pid"
-  fi
+  # A watcher from the previous version is left running on purpose: it keeps
+  # working until the reboot that activates this version replaces it.
 
   # ── Directories ───────────────────────────────────────────────────────────
   ui_print "- Creating data directories..."
   mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$CUSTOM_CERT_DIR"
   mkdir -p "$DATA_DIR/cert_stage" "$DATA_DIR/base_certs"
-  mkdir -p /data/misc/user/0/cacerts-added
+
+  # cacerts-added belongs to Android (system:system). v3.1 and older created
+  # it as root, which blocks installing the first user certificate — undo it.
+  _tuc_ud=/data/misc/user/0/cacerts-added
+  if [ -d "$_tuc_ud" ] && [ "$(stat -c %u "$_tuc_ud" 2>/dev/null)" = 0 ]; then
+    if rmdir "$_tuc_ud" 2>/dev/null; then
+      ui_print "- Removed an empty root-owned cacerts-added (Android recreates it)"
+    else
+      chown 1000:1000 "$_tuc_ud" 2>/dev/null
+      chmod 0755 "$_tuc_ud" 2>/dev/null
+      restorecon "$_tuc_ud" 2>/dev/null
+      ui_print "- Fixed the owner of cacerts-added (root -> system)"
+    fi
+  fi
+  unset _tuc_ud
 
   # Root only — the pre-v3 drop-in dir lived in /data/local/tmp, which any adb
   # shell could write to, i.e. anyone with adb could add a *system* trusted CA.
@@ -109,16 +112,22 @@ EOF
   set_perm "$MODPATH/sh/common.sh" 0 0 0755
   set_perm "$MODPATH/sh/inject.sh" 0 0 0755
 
-  if [ -f "$MODPATH/bin/inotifywait" ]; then
-    set_perm "$MODPATH/bin/inotifywait" 0 0 0755
-    ui_print "- inotifywait: found (event-driven Live Sync)"
+  # Live Sync uses the root manager's busybox inotifyd (Magisk, KernelSU and
+  # APatch all ship it); nothing is bundled.
+  _tuc_bb=""
+  for _tuc_c in /data/adb/magisk/busybox /data/adb/ksu/bin/busybox /data/adb/ap/bin/busybox; do
+    [ -x "$_tuc_c" ] && { _tuc_bb="$_tuc_c"; break; }
+  done
+  if [ -n "$_tuc_bb" ] && "$_tuc_bb" --list 2>/dev/null | grep -qx inotifyd; then
+    ui_print "- Live Sync: event-driven (busybox inotifyd)"
   else
-    ui_print "- inotifywait: missing, Live Sync will poll every 30s"
+    ui_print "- Live Sync: busybox inotifyd not found, will poll every 30s"
   fi
+  unset _tuc_bb _tuc_c
 
   # v2 shipped inotifywait inside system/bin, which mounted it into /system for
-  # every app on the device. It lives in the module's own bin/ directory now.
-  rm -rf "$MODPATH/system" "$MODPATH/apex" 2>/dev/null
+  # every app on the device; v3 kept it in bin/. Neither is used any more.
+  rm -rf "$MODPATH/system" "$MODPATH/apex" "$MODPATH/bin" 2>/dev/null
 
   ui_print " "
   ui_print "- Custom certificates go in:"

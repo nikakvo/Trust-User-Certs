@@ -155,16 +155,32 @@ verify_inject() {
     done
   fi
 
-  if [ "$_vi_want" -gt 0 ] && [ "$_vi_have" -ge "$_vi_want" ] && [ "$_vi_found" -eq "$_vi_users" ]; then
-    log_info "Verify OK — $_vi_have certs live, $_vi_found/$_vi_users user certs trusted"
+  # Custom certificates get the same check. Before v4 they were not verified
+  # at all, so one that never reached the store still reported "Verify OK".
+  _vi_cust=0
+  _vi_cfound=0
+  if [ -d "$CUSTOM_CERT_DIR" ]; then
+    for _vi_f in "$CUSTOM_CERT_DIR"/*; do
+      [ -f "$_vi_f" ] || continue
+      [ -f "$CERT_STAGE/${_vi_f##*/}" ] || continue
+      _vi_cust=$((_vi_cust + 1))
+      [ -f "$_vi_store/${_vi_f##*/}" ] && _vi_cfound=$((_vi_cfound + 1))
+    done
+  fi
+  _vi_ctext=""
+  [ "$_vi_cust" -gt 0 ] && _vi_ctext=", $_vi_cfound/$_vi_cust custom certs trusted"
+
+  if [ "$_vi_want" -gt 0 ] && [ "$_vi_have" -ge "$_vi_want" ] &&
+    [ "$_vi_found" -eq "$_vi_users" ] && [ "$_vi_cfound" -eq "$_vi_cust" ]; then
+    log_info "Verify OK — $_vi_have certs live, $_vi_found/$_vi_users user certs trusted$_vi_ctext"
     write_stats "INJECT_OK=1" "INJECT_COUNT=$_vi_have" "LAST_INJECT=$(date +%s)"
-    unset _vi_store _vi_want _vi_have _vi_users _vi_found _vi_f
+    unset _vi_store _vi_want _vi_have _vi_users _vi_found _vi_f _vi_cust _vi_cfound _vi_ctext
     return 0
   fi
 
-  log_error "Verify FAILED — staged $_vi_want, live $_vi_have, user certs trusted $_vi_found/$_vi_users"
+  log_error "Verify FAILED — staged $_vi_want, live $_vi_have, user certs trusted $_vi_found/$_vi_users$_vi_ctext"
   write_stats "INJECT_OK=0" "INJECT_COUNT=$_vi_have" "LAST_INJECT=$(date +%s)"
-  unset _vi_store _vi_want _vi_have _vi_users _vi_found _vi_f
+  unset _vi_store _vi_want _vi_have _vi_users _vi_found _vi_f _vi_cust _vi_cfound _vi_ctext
   return 1
 }
 

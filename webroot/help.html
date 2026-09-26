@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>TrustUserCerts — Help</title>
+  <style>
+    :root {
+      --bg:#080b0f;--bg2:#0c1018;--surface:#101620;--surface2:#141c28;
+      --border:#1e2a3a;--border2:#243040;--blue:#3b82f6;--blue-dim:rgba(59,130,246,0.14);
+      --teal:#2dd4bf;--green:#4ade80;--green-dim:rgba(74,222,128,0.12);
+      --red:#f87171;--red-dim:rgba(248,113,113,0.12);--amber:#fbbf24;--amber-dim:rgba(251,191,36,0.12);
+      --text:#94a3b8;--text-dim:#56708f;--text-hi:#e2e8f0;
+      --mono:ui-monospace,'IBM Plex Mono','Roboto Mono',Menlo,Consolas,monospace;
+      --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    body{
+      background:var(--bg);color:var(--text);font-family:var(--sans);
+      font-size:14px;line-height:1.7;min-height:100vh;
+      padding-bottom:calc(env(safe-area-inset-bottom,0px) + 40px);
+      padding-left:env(safe-area-inset-left,0px);
+      padding-right:env(safe-area-inset-right,0px);
+    }
+    .header{
+      background:var(--bg2);border-bottom:1px solid var(--border);
+      padding:14px 16px;padding-top:calc(env(safe-area-inset-top,0px) + 14px);
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+      position:sticky;top:0;z-index:10;
+    }
+    .header-left{display:flex;align-items:center;gap:10px;min-width:0;}
+    .logo{width:36px;height:36px;background:linear-gradient(135deg,#0f1a2e,#080b12);border:1px solid var(--blue);border-radius:8px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px var(--blue-dim);flex-shrink:0;}
+    .logo svg{width:16px;height:16px;}
+    .header-title{font-size:15px;font-weight:700;color:var(--text-hi);}
+    .header-sub{font-size:10px;color:var(--text-dim);font-family:var(--mono);margin-top:2px;}
+    .back-btn{
+      background:transparent;border:1px solid var(--border2);border-radius:6px;
+      color:var(--text);padding:7px 12px;font-size:11px;font-family:var(--mono);
+      cursor:pointer;flex-shrink:0;display:flex;align-items:center;gap:5px;
+    }
+    .back-btn:active{opacity:0.5;}
+    .back-btn svg{width:12px;height:12px;}
+
+    .toc{margin:14px 14px 0;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;}
+    .toc-title{font-size:9px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim);margin-bottom:8px;}
+    .toc a{display:block;color:var(--teal);text-decoration:none;font-size:12px;font-family:var(--mono);padding:3px 0;}
+
+    .sec-title{
+      font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--text-dim);
+      font-family:var(--mono);padding:26px 16px 8px;
+    }
+    .sec-title::before{content:'// ';color:var(--blue);opacity:0.7;}
+
+    .box{margin:0 14px 10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+    .box p{margin-bottom:10px;}
+    .box p:last-child{margin-bottom:0;}
+    .box h3{font-size:13px;color:var(--text-hi);font-weight:600;margin:14px 0 6px;}
+    .box h3:first-child{margin-top:0;}
+    .box ul,.box ol{margin:8px 0 10px 18px;}
+    .box li{margin-bottom:5px;}
+    strong{color:var(--text-hi);}
+    code{font-family:var(--mono);font-size:12px;color:var(--teal);background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:1px 5px;word-break:break-all;}
+
+    pre{
+      background:var(--bg2);border:1px solid var(--border);border-radius:8px;
+      padding:12px;overflow-x:auto;-webkit-overflow-scrolling:touch;
+      font-family:var(--mono);font-size:11.5px;line-height:1.65;color:var(--text);
+      margin:8px 0;
+    }
+    pre .cm{color:var(--text-dim);}
+
+    .tbl{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    table{width:100%;border-collapse:collapse;font-size:11.5px;font-family:var(--mono);margin:6px 0;}
+    th{text-align:left;padding:8px 8px 8px 0;color:var(--text-dim);font-weight:400;text-transform:uppercase;letter-spacing:0.06em;font-size:9px;border-bottom:1px solid var(--border);}
+    td{padding:8px 8px 8px 0;border-bottom:1px solid var(--border);vertical-align:top;}
+    tr:last-child td{border-bottom:none;}
+    td:first-child{color:var(--text-hi);white-space:nowrap;padding-right:14px;}
+
+    .note{border-left:2px solid var(--blue);background:var(--blue-dim);padding:10px 12px;border-radius:0 6px 6px 0;margin:10px 0;font-size:13px;}
+    .note.warn{border-left-color:var(--red);background:var(--red-dim);}
+    .note.ok{border-left-color:var(--green);background:var(--green-dim);}
+    .note.tip{border-left-color:var(--amber);background:var(--amber-dim);}
+
+    .footer{text-align:center;padding:28px 16px 8px;font-size:10px;font-family:var(--mono);color:var(--text-dim);}
+    .footer a{color:var(--blue);text-decoration:none;}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.8">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <path d="M9 12l2 2 4-4"/>
+      </svg>
+    </div>
+    <div>
+      <div class="header-title">Help</div>
+      <div class="header-sub">trust user certs</div>
+    </div>
+  </div>
+  <button class="back-btn" onclick="goBack()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+    BACK
+  </button>
+</div>
+
+<div class="toc">
+  <div class="toc-title">contents</div>
+  <a href="#what">1 · What this module does</a>
+  <a href="#install">2 · Installing a certificate</a>
+  <a href="#custom">3 · Custom certificates</a>
+  <a href="#how">4 · How the injection works</a>
+  <a href="#livesync">5 · Live Sync</a>
+  <a href="#guard">6 · Boot-loop protection</a>
+  <a href="#exclude">7 · Exclusion rules</a>
+  <a href="#ui">8 · The interface</a>
+  <a href="#cli">9 · Command line</a>
+  <a href="#trouble">10 · Troubleshooting</a>
+  <a href="#uninstall">11 · Uninstall</a>
+  <a href="#files">12 · File layout</a>
+</div>
+
+<!-- 1 -->
+<div class="sec-title" id="what">1 · what this module does</div>
+<div class="box">
+  <p>Android keeps CA certificates in two stores. The <strong>system</strong> store is trusted by every app. The <strong>user</strong> store — where a certificate goes when you install it in Settings — is ignored by almost every app since Android 7, unless the app opts in.</p>
+  <p>That makes HTTPS inspection tools (HttpCanary, mitmproxy, Burp, Charles…) useless for most apps: you install their CA, and apps still refuse the connection. This module copies your user certificates into the system trust store, so <strong>every app trusts them as if they came with the system</strong>.</p>
+  <div class="note">
+    Install and remove certificates the normal way, in Android Settings. With <strong>Live Sync</strong> on, the change reaches the system store within a few seconds — no reboot.
+  </div>
+  <div class="note warn">
+    Tested on a <strong>Poco F6 Pro</strong> with the <strong>Xiaomi.eu ROM</strong> (HyperOS 3, Android 16) and SukiSU-Ultra only. The Android 7–13 path and other devices, ROMs and root managers are supported by design but have not been tested by the author. If something does not work on your device, the service log usually says why.
+  </div>
+  <div class="note tip">
+    A certificate in the system store makes every app trust whoever holds its private key. Only install CAs you created yourself or fully trust, and remove them when you are done.
+  </div>
+</div>
+
+<!-- 2 -->
+<div class="sec-title" id="install">2 · installing a certificate</div>
+<div class="box">
+  <h3>In Android Settings</h3>
+  <ol>
+    <li>Copy the certificate file to the phone, e.g. to <code>Download</code>.</li>
+    <li>Open <strong>Install a certificate</strong>. The menu path differs between ROMs — the Settings search for <em>CA certificate</em> usually finds it.</li>
+    <li>Choose <strong>CA certificate</strong>, confirm the warning, pick the file.</li>
+  </ol>
+  <p>On the <strong>Xiaomi.eu ROM (HyperOS 3)</strong> the path is:</p>
+  <pre>Settings
+ → Fingerprint, face data, and screen lock
+ → Privacy
+ → More security settings
+ → Encryption &amp; credentials
+ → Install a certificate
+ → CA certificate</pre>
+  <p>HyperOS asks for your screen-lock password when you open the lock-screen settings, and for your fingerprint before the file picker opens.</p>
+  <p>Android stores it in <code>/data/misc/user/0/cacerts-added</code>, Live Sync copies it into the system store, and the certificate list in this interface shows it as <strong>trusted</strong>. Android may ask you to set a screen lock first.</p>
+  <p>To remove it: <strong>Encryption &amp; credentials</strong> → <strong>Trusted credentials</strong> → <strong>User</strong> → the certificate → <strong>Remove</strong>. Live Sync takes it out of the system store as well.</p>
+
+  <h3>The three options in "Install a certificate"</h3>
+  <ul>
+    <li><strong>CA certificate</strong> — a certificate authority your phone should <strong>trust</strong>. This is the one proxy and inspection tools need, and the only one this module works with.</li>
+    <li><strong>VPN &amp; app user certificate</strong> — a key and certificate that identify <strong>your phone</strong> to a server: VPN login, apps using client certificates. It does not make anything trusted.</li>
+    <li><strong>Certificate</strong> — called <em>Wi-Fi certificate</em> on most ROMs: credentials for enterprise Wi-Fi (802.1X / EAP). Not related to this module.</li>
+  </ul>
+
+  <h3>Trusted credentials vs. User credentials</h3>
+  <p><strong>Trusted credentials → User</strong> lists the CA certificates in the user store — exactly what this module reads. <strong>User credentials</strong> lists keys and certificates in Android's keystore ("Installed for VPN and apps"): client certificates, keys created by apps, and on some ROMs copies of installed CAs. Nothing there is trusted for HTTPS, and the module neither reads nor changes it.</p>
+  <div class="note">
+    Proxy apps such as HttpCanary do not need a VPN certificate: their "VPN" is a local <code>VpnService</code> that routes traffic through the app, and decrypting HTTPS depends only on their <strong>CA certificate</strong> being trusted.
+  </div>
+
+  <h3>File formats</h3>
+  <div class="tbl"><table>
+    <tr><th>extension</th><th>what it is</th></tr>
+    <tr><td>.crt .cer .pem .der</td><td>An X.509 certificate, as text (PEM) or binary (DER). This is what you want. Install it as <strong>CA certificate</strong>.</td></tr>
+    <tr><td>.p12 .pfx</td><td>A PKCS#12 bundle: certificate <strong>and private key</strong>. It is not a CA certificate — Android offers it as a VPN / app or Wi-Fi certificate. Extract the certificate first (below).</td></tr>
+  </table></div>
+  <pre><span class="cm"># Termux: pkg install openssl-tool</span>
+openssl pkcs12 -in file.p12 -nokeys -out ca.pem</pre>
+  <div class="note">
+    Proxy apps often offer their own "install to system" option with root. Use the Settings installer instead: this module then manages the certificate, and removing it in Settings removes it everywhere.
+  </div>
+</div>
+
+<!-- 3 -->
+<div class="sec-title" id="custom">3 · custom certificates</div>
+<div class="box">
+  <p>Certificates you do not want in Android's user store can be dropped straight into the module's own directory:</p>
+  <pre>/data/adb/trust-user-certs/certs/</pre>
+  <p>They are added to the system store on every boot and every sync, exactly like user certificates, and appear in Settings under <strong>System</strong>. The directory is root-only (<code>0700</code>) on purpose: whoever can write to it can make the whole phone trust a CA. Live Sync watches it too, so a new file is picked up within seconds.</p>
+
+  <h3>The file name matters</h3>
+  <p>Android finds certificates by the hash of their subject, so the file <strong>must</strong> be named <code>&lt;subject_hash_old&gt;.0</code>, e.g. <code>87bc3517.0</code>. Any other name is copied but ignored by Android; the log warns about it. PEM and DER content both work.</p>
+  <pre>openssl x509 -in ca.pem -noout -subject_hash_old
+<span class="cm"># 87bc3517  -&gt;  name the file 87bc3517.0</span></pre>
+
+  <h3>Easiest way, without openssl</h3>
+  <p>Install the certificate once in Settings — Android names the file correctly — then copy it over and, if you like, remove it from Settings:</p>
+  <pre>su -c "cp /data/misc/user/0/cacerts-added/87bc3517.0 /data/adb/trust-user-certs/certs/"
+su -c "chmod 644 /data/adb/trust-user-certs/certs/87bc3517.0"</pre>
+  <p>The certificate list shows it with a <strong>custom</strong> tag, and the header chip counts it.</p>
+  <div class="note warn">
+    Uninstalling the module deletes <code>/data/adb/trust-user-certs</code>, <strong>including this directory</strong>. Keep a copy of your custom certificates somewhere else. Updating the module keeps them.
+  </div>
+  <div class="note">
+    An app that checks whether "its" certificate is installed may only look at the user store and warn that it is missing — even though every app trusts the certificate through the system store.
+  </div>
+</div>
+
+<!-- 4 -->
+<div class="sec-title" id="how">4 · how the injection works</div>
+<div class="box">
+  <p>The module never modifies <code>/system</code>. It mounts a merged copy of the trust store over the real one. The copy is rebuilt from scratch each time:</p>
+  <ol>
+    <li><code>base_certs</code> — a snapshot of the stock system store, taken while no overlay of the module is active;</li>
+    <li>plus your user certificates and your custom certificates;</li>
+    <li>minus anything matched by an exclusion rule.</li>
+  </ol>
+  <p>Because the set is always rebuilt from the stock snapshot, a certificate you remove disappears from the system store too.</p>
+
+  <h3>Android 14 and newer</h3>
+  <p>The trust store lives in the Conscrypt APEX (<code>/apex/com.android.conscrypt/cacerts</code>). It cannot be mounted over this early in boot, so <code>post-fs-data.sh</code> only marks the work as deferred; <code>service.sh</code> waits for zygote, then bind-mounts the merged set over the APEX path and into the mount namespaces of init and zygote with <code>nsenter</code>.</p>
+
+  <h3>Android 13 and older</h3>
+  <p>A tmpfs holding the merged set is mounted over <code>/system/etc/security/cacerts</code> at <code>post-fs-data</code>, before any app starts.</p>
+
+  <h3>Verification</h3>
+  <p>Every inject and sync is checked against the live store: the store must hold at least the staged set, and every user and custom certificate must actually be there. The result is <code>INJECT_OK</code> and a log line such as:</p>
+  <pre>Verify OK — 151 certs live, 1/1 user certs trusted, 1/1 custom certs trusted</pre>
+  <p>A mount that silently failed is reported as a failure, never as a success.</p>
+  <div class="note">
+    Apps that were already running when a certificate was added may keep their old trust cache until they are restarted.
+  </div>
+</div>
+
+<!-- 5 -->
+<div class="sec-title" id="livesync">5 · live sync</div>
+<div class="box">
+  <p>Live Sync keeps the system store in step with your certificates while the phone runs. It uses the root manager's own <strong>busybox <code>inotifyd</code></strong> — Magisk, KernelSU, SukiSU and APatch all ship it — so the kernel reports every change and nothing is polled.</p>
+
+  <h3>What is watched</h3>
+  <ul>
+    <li><code>/data/misc/user/0/cacerts-added</code> — certificates installed or removed in Settings</li>
+    <li><code>/data/misc/user/0</code> — notices <code>cacerts-added</code> being created (your first certificate ever) or removed</li>
+    <li><code>/data/adb/trust-user-certs/certs</code> — your custom certificates</li>
+  </ul>
+  <p>Only writes, creations, deletions and renames count. Reading the certificates — which the module itself does on every sync — never triggers a sync.</p>
+
+  <h3>One sync per change</h3>
+  <p>Installing a certificate produces a short burst of events (create, then write). The watcher waits until the directory has been quiet for 2 seconds and then syncs once; if changes never stop, it syncs anyway after 10 seconds. The log shows each burst:</p>
+  <pre>Change detected (2 event(s), first: n cacerts-added/87bc3517.0)</pre>
+
+  <h3>Self-healing</h3>
+  <p>The watcher checks every 60 seconds that <code>inotifyd</code> is still running, restarts it if not and syncs once to catch anything missed. If it fails more than 5 times within 10 minutes — or <code>inotifyd</code> is not available at all — Live Sync switches to <strong>polling every 30 seconds</strong>. Both modes are shown in the Live Sync card.</p>
+  <p>When idle, Live Sync is two sleeping processes — the watcher and its <code>inotifyd</code> — and uses no CPU.</p>
+
+  <h3>Turned off</h3>
+  <p>With Live Sync off, certificates are still injected at every boot; changes just wait for the next reboot or for <strong>Force Inject</strong>.</p>
+</div>
+
+<!-- 6 -->
+<div class="sec-title" id="guard">6 · boot-loop protection</div>
+<div class="box">
+  <p>Mounting over the trust store happens early in boot, so a failure must never leave the phone stuck in a boot loop.</p>
+  <ul>
+    <li>Every boot increments a fail counter in <code>post-fs-data</code>.</li>
+    <li>The counter is reset only once Android reports <code>sys.boot_completed</code> — a boot that really finished.</li>
+    <li>After <strong>3</strong> boots that did not finish, injection is disabled and the status shows <strong>BLOCKED</strong>. The phone boots with the stock trust store.</li>
+  </ul>
+  <p>Once you have found the cause, press <strong>Reset Fail Counter</strong> and reboot.</p>
+</div>
+
+<!-- 7 -->
+<div class="sec-title" id="exclude">7 · exclusion rules</div>
+<div class="box">
+  <p>Certificates matched by a rule are kept out of the system store, even if they are installed.</p>
+  <div class="tbl"><table>
+    <tr><th>file</th><th>one rule per line</th></tr>
+    <tr><td>exclude_hashes</td><td>a subject hash — the file name without <code>.0</code></td></tr>
+    <tr><td>exclude_subjects</td><td>text matched against the certificate body (user and custom certificates only)</td></tr>
+  </table></div>
+  <p>Both live in <code>/data/adb/trust-user-certs/</code>; lines starting with <code>#</code> are comments. They ship with a rule for AdGuard's personal intermediate CA, which conflicts when it sits in the system store. An excluded certificate is labelled <em>excluded by rule</em> in the list and does not count as a failure.</p>
+</div>
+
+<!-- 8 -->
+<div class="sec-title" id="ui">8 · the interface</div>
+<div class="box">
+  <h3>Status</h3>
+  <div class="tbl"><table>
+    <tr><th>state</th><th>meaning</th></tr>
+    <tr><td>WORKING</td><td>the overlay is active and every user and custom certificate is in it</td></tr>
+    <tr><td>READY</td><td>the overlay is active; you have no certificates installed yet</td></tr>
+    <tr><td>PARTIAL</td><td>the overlay is active but at least one certificate is missing from it</td></tr>
+    <tr><td>NOT WORKING</td><td>the trust store is not overlaid</td></tr>
+    <tr><td>BLOCKED</td><td>the boot-loop guard stopped the injection</td></tr>
+  </table></div>
+  <p>The chips show the number of certificates in the live store, trusted user certificates, trusted custom certificates (when you have any) and the fail counter. An <code>+1x</code> suffix counts certificates dropped by an exclusion rule.</p>
+
+  <h3>Certificates</h3>
+  <p>Every user and custom certificate with its subject, validity, serial, source and whether it actually reached the system store.</p>
+
+  <h3>Live Sync</h3>
+  <p>One tap starts or stops the watcher. The card shows the mode (<em>event-driven</em> or <em>polling</em>), the PID, how many syncs ran and when the last one was.</p>
+
+  <h3>Actions</h3>
+  <div class="tbl"><table>
+    <tr><th>button</th><th>what it does</th></tr>
+    <tr><td>Force Inject</td><td>rebuilds the merged set and refreshes the overlay; rebuilds the overlay from scratch if verification fails</td></tr>
+    <tr><td>Force Sync</td><td>one Live Sync pass; also restarts the watcher if Live Sync is on but the watcher is gone</td></tr>
+    <tr><td>Reset Fail Counter</td><td>clears the boot-loop guard</td></tr>
+  </table></div>
+
+  <h3>Log</h3>
+  <p>Filterable by INFO / WARN / ERR / DBG. Log level <code>0</code> records errors only, <code>1</code> is normal, <code>2</code> adds debug detail.</p>
+</div>
+
+<!-- 9 -->
+<div class="sec-title" id="cli">9 · command line</div>
+<div class="box">
+  <p>The interface runs these same commands, so everything works from a root shell as well:</p>
+  <pre>S=/data/adb/modules/trust-user-certs/service.sh
+
+sh $S --status              <span class="cm"># key=value status dump</span>
+sh $S --certs               <span class="cm"># user/custom certificates, base64</span>
+sh $S --log 200             <span class="cm"># tail of the service log</span>
+sh $S --clear-log
+sh $S --force-inject
+sh $S --sync                <span class="cm"># one Live Sync pass</span>
+sh $S --watch-start
+sh $S --watch-stop
+sh $S --config LIVE_SYNC 1  <span class="cm"># also starts / stops the watcher</span>
+sh $S --config LOG_LEVEL 2
+sh $S --reset-fail</pre>
+  <p>Quick health check:</p>
+  <pre>su -c "sh $S --status" | grep -E 'INJECT_OK|WATCH|USER_|CUSTOM_'</pre>
+</div>
+
+<!-- 10 -->
+<div class="sec-title" id="trouble">10 · troubleshooting</div>
+<div class="box">
+  <h3>NOT WORKING</h3>
+  <p>The overlay is not mounted, usually because a bind mount failed. Look for <code>Verify FAILED</code> in the log and press <strong>Force Inject</strong>.</p>
+
+  <h3>PARTIAL</h3>
+  <p>A certificate did not reach the store. The certificate list marks which one. A custom certificate with a wrong file name is the usual cause (see section 3).</p>
+
+  <h3>BLOCKED</h3>
+  <p>Three boots in a row did not finish. Find the cause in the log, then press <strong>Reset Fail Counter</strong>, or:</p>
+  <pre>su -c "echo 0 &gt; /data/adb/trust-user-certs/boot_fail_count"</pre>
+
+  <h3>Live Sync shows DEAD</h3>
+  <p>Press <strong>Force Sync</strong> — it restarts the watcher — or toggle Live Sync off and on. A watcher started from here moves itself out of the manager app's cgroups, so closing the manager does not kill it.</p>
+
+  <h3>Live Sync says "polling every 30s"</h3>
+  <p><code>inotifyd</code> is missing from your root manager's busybox or kept exiting. Syncing still works, only up to 30 seconds later. The log says which of the two happened.</p>
+
+  <h3>Android will not install my certificate</h3>
+  <p>A <code>.p12</code> / <code>.pfx</code> file is not a CA certificate — extract it first (section 2). Versions up to v3.1 created <code>cacerts-added</code> as root, which could stop Android from adding the first certificate; since v4 the module repairs that at install and at boot.</p>
+
+  <h3>One app still rejects the certificate</h3>
+  <p>That app uses <strong>certificate pinning</strong>: it trusts only specific certificates, no matter what is in the system store. No trust-store module can change that; a pinning bypass such as <a href="https://github.com/hang666/JustTrustMePro/releases" target="_blank" style="color:var(--teal)">JustTrustMePro</a> (LSPosed) can.</p>
+
+  <h3>"nsenter is unavailable" in the log</h3>
+  <p>The certificates cannot be pushed into the zygote mount namespace, so apps started before the injection may only see them after a reboot. <code>--status</code> lists the tools that were found.</p>
+
+  <h3>Interface is blank or shows a red box</h3>
+  <p>Your root manager did not provide a working <code>ksu</code> JavaScript bridge. Open the module through KernelSU, SukiSU, APatch or MMRL. Plain Magisk has no WebUI; the module itself still works there.</p>
+</div>
+
+<!-- 11 -->
+<div class="sec-title" id="uninstall">11 · uninstall</div>
+<div class="box">
+  <p>Removing the module in your root manager takes effect at the <strong>next reboot</strong>: the overlay is no longer mounted, so the stock trust store is back, and <code>uninstall.sh</code> stops anything left of Live Sync and deletes <code>/data/adb/trust-user-certs</code>.</p>
+  <div class="note warn">
+    That includes your <strong>custom certificates</strong>. Back them up first.
+  </div>
+  <p>Certificates you installed in Android Settings are not touched: they stay in the user store, where only apps that opt in trust them.</p>
+</div>
+
+<!-- 12 -->
+<div class="sec-title" id="files">12 · file layout</div>
+<div class="box">
+  <pre>/data/adb/modules/trust-user-certs/
+├── post-fs-data.sh    <span class="cm">early boot: inject (≤13) or defer (≥14)</span>
+├── service.sh         <span class="cm">boot flow, Live Sync, command interface</span>
+├── sh/common.sh       <span class="cm">paths, logging, locks, tools</span>
+├── sh/inject.sh       <span class="cm">staging, mounting, verification</span>
+├── customize.sh       <span class="cm">installer</span>
+├── uninstall.sh       <span class="cm">cleanup, unmount</span>
+└── webroot/           <span class="cm">this interface</span>
+
+/data/adb/trust-user-certs/     <span class="cm">(mode 0700, survives updates)</span>
+├── config             <span class="cm">LIVE_SYNC, LOG_LEVEL</span>
+├── stats              <span class="cm">runtime state and counters</span>
+├── boot_fail_count    <span class="cm">boot-loop guard</span>
+├── certs/             <span class="cm">your custom certificates</span>
+├── base_certs/        <span class="cm">snapshot of the stock store</span>
+├── cert_stage/        <span class="cm">the merged set that is mounted</span>
+├── exclude_hashes
+├── exclude_subjects
+├── locks/
+├── logs/service.log   <span class="cm">rotates at 256 KB</span>
+├── watcher.pid        <span class="cm">runtime only, cleared on boot</span>
+├── inotifyd.pid       <span class="cm">runtime only</span>
+└── watch.fifo         <span class="cm">inotifyd → watcher</span>
+
+/data/misc/user/0/cacerts-added/   <span class="cm">Android's user store (owned by system)</span></pre>
+  <p>Nothing mutable lives in the module directory, because a module update replaces it wholesale.</p>
+</div>
+
+<div class="footer">
+  trust user certs · <a href="https://github.com/nikakvo/Trust-User-Certs" target="_blank">GitHub →</a>
+</div>
+
+<script>
+  function goBack() {
+    // history.back() is right when the user arrived from index.html. Some
+    // managers open a webroot file directly with no history to go back to, so
+    // fall through to an explicit navigation if nothing happened.
+    var left = false;
+    window.addEventListener('pagehide', function () { left = true; });
+
+    if (window.history.length > 1) {
+      window.history.back();
+      setTimeout(function () {
+        if (!left) window.location.href = 'index.html';
+      }, 300);
+    } else {
+      window.location.href = 'index.html';
+    }
+  }
+</script>
+</body>
+</html>

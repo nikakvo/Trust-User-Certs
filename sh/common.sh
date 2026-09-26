@@ -21,6 +21,10 @@ STATS_LOCK="$LOCK_DIR/stats.lock"
 CONFIG_LOCK="$LOCK_DIR/config.lock"
 SYNC_LOCK="$LOCK_DIR/sync.lock"
 WATCH_PID_FILE="$DATA_DIR/watcher.pid"
+# Live Sync runtime files (removed at every boot, never trusted across one).
+INOTIFYD_PID_FILE="$DATA_DIR/inotifyd.pid"
+WATCH_FIFO="$DATA_DIR/watch.fifo"
+WATCH_ERR_FILE="$DATA_DIR/inotifyd.err"
 
 EXCLUDE_HASH_FILE="$DATA_DIR/exclude_hashes"
 EXCLUDE_SUBJ_FILE="$DATA_DIR/exclude_subjects"
@@ -34,6 +38,9 @@ CUSTOM_CERT_DIR="$DATA_DIR/certs"
 LEGACY_CUSTOM_CERT_DIR="/data/local/tmp/cert"
 
 USER_CERT_DIR="/data/misc/user/0/cacerts-added"
+# Parent of USER_CERT_DIR, created by Android for every user. Watched so the
+# watcher notices cacerts-added appearing (first certificate ever) or going.
+USER_CERT_PARENT="${USER_CERT_DIR%/*}"
 SYSTEM_CERT_DIR="/system/etc/security/cacerts"
 APEX_CONSCRYPT_DIR="/apex/com.android.conscrypt/cacerts"
 
@@ -44,6 +51,17 @@ FAIL_LIMIT=3
 LOG_MAX_BYTES=262144
 LOG_KEEP_LINES=300
 SETTLE_SECONDS=15
+
+# Live Sync. Measured on HyperOS 3 / Android 16: KeyChain writes a certificate
+# in place (n c w e, ~50 ms) and removes one with c w d (~70 ms).
+WATCH_MASK="nwdmyDM"     # cert dirs: create, close_write, delete, moves, self
+WATCH_PARENT_MASK="nydm" # parent: cacerts-added created / deleted / moved
+WATCH_DEBOUNCE=2         # s of quiet after the last event before syncing
+WATCH_MAX_DELAY=10       # s — sync anyway if events never stop
+WATCH_TICK=60            # s — idle wake-up to health-check inotifyd
+WATCH_RESTART_MAX=5      # unexpected inotifyd deaths allowed ...
+WATCH_RESTART_WINDOW=600 # ... within this many seconds, then poll mode
+POLL_INTERVAL=30         # s between poll-mode fingerprints
 
 # ── SDK (never leave this unset — every branch below depends on it) ───────────
 SDK="$(getprop ro.build.version.sdk 2>/dev/null)"
@@ -102,10 +120,12 @@ CMD_PGREP=$(resolve_cmd pgrep)
 CMD_PKILL=$(resolve_cmd pkill)
 CMD_STAT=$(resolve_cmd stat)
 CMD_BASE64=$(resolve_cmd base64)
+CMD_MKFIFO=$(resolve_cmd mkfifo)
 
 log_tools() {
   log_debug "busybox: ${BUSYBOX:-none}"
-  log_debug "tools: nsenter=${CMD_NSENTER:-MISSING} setsid=${CMD_SETSID:-none} nohup=${CMD_NOHUP:-none} pgrep=${CMD_PGREP:-none} stat=${CMD_STAT:-none} base64=${CMD_BASE64:-none}"
+  log_debug "tools: nsenter=${CMD_NSENTER:-MISSING} setsid=${CMD_SETSID:-none} nohup=${CMD_NOHUP:-none} pgrep=${CMD_PGREP:-none} stat=${CMD_STAT:-none} base64=${CMD_BASE64:-none} mkfifo=${CMD_MKFIFO:-none}"
+  if has_applet inotifyd; then log_debug "busybox inotifyd: yes"; else log_debug "busybox inotifyd: no"; fi
   [ -n "$CMD_NSENTER" ] || log_warn "nsenter is unavailable — certificates cannot be pushed into the zygote mount namespace, so apps started before the inject may not see them until a reboot"
   return 0
 }
@@ -165,6 +185,48 @@ file_size() {
   esac
   printf '%s' "$_fs"
   unset _fs
+}
+
+# ── Process identity (a PID from a file is never trusted on its own) ──────────
+# pid_alive <pid> — exists and is not a zombie. Builtins only (hot path).
+pid_alive() {
+  case "$1" in '' | 0 | *[!0-9]*) return 1 ;; esac
+  [ -r "/proc/$1/stat" ] || return 1
+  read -r _pa_st <"/proc/$1/stat" 2>/dev/null || return 1
+  _pa_st="${_pa_st##*) }"
+  case "$_pa_st" in
+    Z* | X* | '')
+      unset _pa_st
+      return 1
+      ;;
+  esac
+  unset _pa_st
+  return 0
+}
+
+# pid_is <pid> <needle> — alive AND its command line contains <needle>, so a
+# PID recycled by some other process (after a reboot, say) never matches.
+pid_is() {
+  pid_alive "$1" || return 1
+  grep -q -F -- "$2" "/proc/$1/cmdline" 2>/dev/null
+}
+
+# read_pid_file <file> — prints the number in <file>, or 0.
+read_pid_file() {
+  _rp=$(cat "$1" 2>/dev/null)
+  case "$_rp" in
+    '' | *[!0-9]*) _rp=0 ;;
+  esac
+  printf '%s' "$_rp"
+  unset _rp
+}
+
+# uptime_s — whole seconds since boot, builtins only (no date spawn).
+uptime_s() {
+  read -r _up _ </proc/uptime 2>/dev/null
+  UPTIME_S="${_up%%.*}"
+  case "$UPTIME_S" in '' | *[!0-9]*) UPTIME_S=0 ;; esac
+  unset _up
 }
 
 # daemon_detach — leave the caller's cgroups and opt out of the low-memory
@@ -471,6 +533,38 @@ apply_selinux_context() {
     chcon -R "u:object_r:system_security_cacerts_file:s0" "$2" 2>/dev/null ||
       chcon -R "u:object_r:system_file:s0" "$2" 2>/dev/null
   fi
+  return 0
+}
+
+# ── cacerts-added ownership ───────────────────────────────────────────────────
+# v3.1 and older created $USER_CERT_DIR as root:root 0755 at every boot. Android
+# creates it itself (system:system 0755) when the first user certificate is
+# installed, and KeyChain — running as uid system — cannot write into a
+# root-owned one, so on a device without user certificates that mkdir made
+# installing the first one impossible. Undo it:
+#   root-owned and empty     -> rmdir; Android recreates it correctly
+#   root-owned with files    -> chown system:system, chmod 0755
+#   owned by anyone else     -> left alone
+repair_user_cert_dir() {
+  [ -d "$USER_CERT_DIR" ] || return 0
+  _ru_uid=""
+  [ -n "$CMD_STAT" ] && _ru_uid=$($CMD_STAT -c %u "$USER_CERT_DIR" 2>/dev/null)
+  case "$_ru_uid" in
+    '' | *[!0-9]*) _ru_uid=$(ls -ldn "$USER_CERT_DIR" 2>/dev/null | awk '{print $3}') ;;
+  esac
+  if [ "$_ru_uid" != "0" ]; then
+    unset _ru_uid
+    return 0
+  fi
+  unset _ru_uid
+  if rmdir "$USER_CERT_DIR" 2>/dev/null; then
+    log_info "Removed an empty root-owned $USER_CERT_DIR (left by an older version) — Android recreates it with the right owner"
+    return 0
+  fi
+  chown 1000:1000 "$USER_CERT_DIR" 2>/dev/null
+  chmod 0755 "$USER_CERT_DIR" 2>/dev/null
+  restorecon "$USER_CERT_DIR" 2>/dev/null
+  log_warn "$USER_CERT_DIR was owned by root — changed to system:system so Android can add certificates"
   return 0
 }
 

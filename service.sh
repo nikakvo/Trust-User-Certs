@@ -31,52 +31,236 @@ mkdir -p "$DATA_DIR" "$LOG_DIR" "$LOCK_DIR" "$CUSTOM_CERT_DIR" 2>/dev/null
 _load_log_level
 
 # ── Watcher process helpers ───────────────────────────────────────────────────
-watcher_pid() {
-  _w=$(cat "$WATCH_PID_FILE" 2>/dev/null)
-  case "$_w" in
-    '' | *[!0-9]*) _w=0 ;;
-  esac
-  printf '%s' "$_w"
-  unset _w
-}
+# The watcher is either the boot-time service.sh itself or a detached
+# `service.sh --watch`; both command lines contain this path. Anything else
+# holding a PID from watcher.pid (a recycled PID after a reboot, another
+# module's service.sh) is not ours and is never signalled.
+WATCHER_ID="$MODULE_ID/service.sh"
+TAB=$(printf '\t')
 
-watcher_is_running() {
-  _wr=$(watcher_pid)
-  [ "$_wr" -gt 0 ] || return 1
-  [ -d "/proc/$_wr" ] || return 1
-  # Guard against a recycled PID belonging to some unrelated process.
-  grep -q 'service.sh' "/proc/$_wr/cmdline" 2>/dev/null || return 1
-  unset _wr
-  return 0
+watcher_pid() { read_pid_file "$WATCH_PID_FILE"; }
+
+watcher_is_running() { pid_is "$(watcher_pid)" "$WATCHER_ID"; }
+
+# inotifyd_is <pid> — our inotifyd: its argv holds the watched parent dir.
+inotifyd_is() { pid_is "$1" "inotifyd" && pid_is "$1" "$USER_CERT_PARENT"; }
+
+# Runtime files are never trusted across a boot.
+watcher_clear_runtime() {
+  rm -f "$WATCH_PID_FILE" "$INOTIFYD_PID_FILE" "$WATCH_FIFO" "$WATCH_ERR_FILE" 2>/dev/null
 }
 
 watcher_shutdown() {
-  log_info "Watcher stopping (pid $$)"
+  trap '' TERM INT HUP
+  ev_stop_inotifyd
+  [ "${POLL_SLEEP_PID:-0}" -gt 0 ] && kill "$POLL_SLEEP_PID" 2>/dev/null
+  exec 3>&-
+  rm -f "$WATCH_FIFO" 2>/dev/null
+  [ "$(watcher_pid)" = "$$" ] && rm -f "$WATCH_PID_FILE" 2>/dev/null
   write_stats "LIVESYNC_STATUS=stopped" "LIVESYNC_PID=0"
-  rm -f "$WATCH_PID_FILE" 2>/dev/null
+  log_info "Watcher stopped (pid $$)"
   exit 0
 }
 
-detect_inotify() {
-  INOTIFY_BIN=""
-  for _di_c in "$MODDIR/bin/inotifywait" "$MODDIR/system/bin/inotifywait"; do
-    if [ -f "$_di_c" ]; then
-      chmod 755 "$_di_c" 2>/dev/null
-      INOTIFY_BIN="$_di_c"
-      break
+# ── Event engine: busybox inotifyd -> FIFO on fd 3 -> builtin read ────────────
+# Idle cost is one sleeping inotifyd and one shell blocked in read(2); nothing
+# is spawned until an event arrives or the WATCH_TICK health check runs.
+EV_PID=0
+POLL_SLEEP_PID=0
+
+ev_stop_inotifyd() {
+  if [ "$EV_PID" -gt 0 ] && inotifyd_is "$EV_PID"; then
+    kill "$EV_PID" 2>/dev/null
+  fi
+  EV_PID=0
+  rm -f "$INOTIFYD_PID_FILE" 2>/dev/null
+}
+
+# ev_start_inotifyd — (re)start inotifyd on every target that exists right
+# now. The parent is always watched, so a cacerts-added that does not exist
+# yet (no user certificate installed ever) is picked up when Android creates it.
+ev_start_inotifyd() {
+  ev_stop_inotifyd
+  set -- "$USER_CERT_PARENT:$WATCH_PARENT_MASK"
+  [ -d "$USER_CERT_DIR" ] && set -- "$@" "$USER_CERT_DIR:$WATCH_MASK"
+  [ -d "$CUSTOM_CERT_DIR" ] && set -- "$@" "$CUSTOM_CERT_DIR:$WATCH_MASK"
+  "$BUSYBOX" inotifyd - "$@" >&3 2>"$WATCH_ERR_FILE" &
+  EV_PID=$!
+  echo "$EV_PID" >"$INOTIFYD_PID_FILE"
+  # A bad path makes inotifyd exit at once; a real check beats any guess.
+  sleep 1
+  if pid_alive "$EV_PID"; then
+    log_debug "inotifyd pid $EV_PID watching: $*"
+    return 0
+  fi
+  log_warn "inotifyd exited at start: $(head -n 2 "$WATCH_ERR_FILE" 2>/dev/null | tr '\n' ' ')"
+  EV_PID=0
+  rm -f "$INOTIFYD_PID_FILE" 2>/dev/null
+  return 1
+}
+
+ev_setup() {
+  if [ -z "$BUSYBOX" ] || ! has_applet inotifyd; then
+    log_warn "busybox inotifyd is unavailable — Live Sync will poll every ${POLL_INTERVAL}s"
+    return 1
+  fi
+  rm -f "$WATCH_FIFO" 2>/dev/null
+  $CMD_MKFIFO "$WATCH_FIFO" 2>/dev/null
+  if [ ! -p "$WATCH_FIFO" ]; then
+    log_warn "Cannot create $WATCH_FIFO — Live Sync will poll every ${POLL_INTERVAL}s"
+    return 1
+  fi
+  # Read-write open: never blocks, never hits EOF when inotifyd restarts.
+  exec 3<>"$WATCH_FIFO"
+  if ! ev_start_inotifyd; then
+    exec 3>&-
+    rm -f "$WATCH_FIFO" 2>/dev/null
+    log_warn "inotifyd does not run here — Live Sync will poll every ${POLL_INTERVAL}s"
+    return 1
+  fi
+  return 0
+}
+
+# ev_loop — only returns when event mode has to be given up (poll takes over).
+ev_loop() {
+  _pending=0 # a sync is owed
+  _rearm=0   # the set of watch targets changed, restart inotifyd first
+  _first=0   # uptime of the first event of the current burst
+  _what=""
+  _nev=0
+  _restarts=0
+  _fast=0
+  uptime_s
+  _win=$UPTIME_S
+
+  while :; do
+    if [ "$_pending" = 1 ]; then _t=$WATCH_DEBOUNCE; else _t=$WATCH_TICK; fi
+    uptime_s
+    _t0=$UPTIME_S
+
+    # read -t: supported by busybox ash and mksh, the only shells used here.
+    # shellcheck disable=SC3045
+    if IFS="$TAB" read -r -t "$_t" _ev _dir _name <&3; then
+      _fast=0
+      _hit=0
+      case "$_ev" in
+        *o*) _hit=1 ;; # kernel queue overflow: events were lost, resync
+      esac
+      case "$_dir" in
+        "$USER_CERT_PARENT")
+          if [ "$_name" = "${USER_CERT_DIR##*/}" ]; then
+            _hit=1
+            _rearm=1
+          fi
+          ;;
+        "$USER_CERT_DIR" | "$CUSTOM_CERT_DIR")
+          _hit=1
+          case "$_ev" in *[DMx]*) _rearm=1 ;; esac
+          ;;
+      esac
+      uptime_s
+      if [ "$_hit" = 1 ]; then
+        _nev=$((_nev + 1))
+        if [ "$_pending" = 0 ]; then
+          _pending=1
+          # The burst starts when its first event ARRIVES — not when this
+          # read began (after a 60 s idle wait that would count as "late"
+          # and split every burst in two, as seen on the phone).
+          _first=$UPTIME_S
+          _what="$_ev ${_dir##*/}/${_name}"
+        fi
+      fi
+      [ "$_pending" = 1 ] || continue
+      # Keep collecting the burst, but never postpone a sync forever.
+      [ $((UPTIME_S - _first)) -ge "$WATCH_MAX_DELAY" ] || continue
+    else
+      # read failed: a timeout, or something is badly wrong with fd 3.
+      uptime_s
+      if [ "$UPTIME_S" -le "$_t0" ] && [ "$_t" -ge 1 ]; then
+        _fast=$((_fast + 1))
+        if [ "$_fast" -gt 20 ]; then
+          log_error "Event pipe is not readable — giving up event mode"
+          return 1
+        fi
+      else
+        _fast=0
+      fi
+    fi
+
+    if [ "$_rearm" = 1 ]; then
+      _rearm=0
+      log_info "Watch targets changed — restarting inotifyd"
+      ev_start_inotifyd
+    fi
+
+    if [ "$_pending" = 1 ]; then
+      _pending=0
+      log_info "Change detected ($_nev event(s), first: $_what)"
+      _nev=0
+      do_live_sync
+      log_rotate
+    fi
+
+    # Health check. An inotifyd that dies silently would turn Live Sync off
+    # without anyone noticing — exactly the v3.1 inotifywait failure.
+    if ! pid_alive "$EV_PID"; then
+      uptime_s
+      if [ $((UPTIME_S - _win)) -gt "$WATCH_RESTART_WINDOW" ]; then
+        _win=$UPTIME_S
+        _restarts=0
+      fi
+      _restarts=$((_restarts + 1))
+      write_stats "WATCH_RESTARTS=$_restarts"
+      if [ "$_restarts" -gt "$WATCH_RESTART_MAX" ]; then
+        log_warn "inotifyd failed $_restarts times within ${WATCH_RESTART_WINDOW}s — switching to poll mode"
+        return 1
+      fi
+      if [ "$EV_PID" -gt 0 ]; then
+        log_warn "inotifyd (pid $EV_PID) is gone — restarting ($_restarts/$WATCH_RESTART_MAX)"
+      else
+        log_warn "inotifyd is not running — retrying ($_restarts/$WATCH_RESTART_MAX)"
+      fi
+      if ev_start_inotifyd; then
+        # Changes made while it was down were not seen: resync once.
+        _pending=1
+        _first=$UPTIME_S
+        _what="watcher restart"
+      fi
     fi
   done
-  if [ -z "$INOTIFY_BIN" ] && command -v inotifywait >/dev/null 2>&1; then
-    INOTIFY_BIN="$(command -v inotifywait)"
+}
+
+# ── Poll engine (fallback) ────────────────────────────────────────────────────
+# Directory mtimes change on create/delete/rename; file mtimes and sizes catch
+# an in-place overwrite (cp -f into the custom dir).
+poll_fingerprint() {
+  if [ -n "$CMD_STAT" ]; then
+    $CMD_STAT -c '%n %Y %s' "$USER_CERT_DIR" "$USER_CERT_DIR"/* \
+      "$CUSTOM_CERT_DIR" "$CUSTOM_CERT_DIR"/* 2>/dev/null
+  else
+    ls -la "$USER_CERT_DIR" "$CUSTOM_CERT_DIR" 2>/dev/null
   fi
-  if [ -n "$INOTIFY_BIN" ]; then
-    "$INOTIFY_BIN" -h >/dev/null 2>&1
-    if [ "$?" -ge 126 ]; then
-      log_warn "inotifywait found but not executable on this device — using poll mode"
-      INOTIFY_BIN=""
+}
+
+poll_loop() {
+  write_stats "LIVESYNC_MODE=poll" "LIVESYNC_PID=$$" "LIVESYNC_STATUS=running"
+  log_info "Polling the certificate store every ${POLL_INTERVAL}s"
+  _last=$(poll_fingerprint)
+  while :; do
+    # sleep & wait: a TERM arrives while waiting and the trap runs at once.
+    sleep "$POLL_INTERVAL" &
+    POLL_SLEEP_PID=$!
+    wait "$POLL_SLEEP_PID"
+    POLL_SLEEP_PID=0
+    _cur=$(poll_fingerprint)
+    if [ "$_cur" != "$_last" ]; then
+      log_info "Poll: change detected in the certificate store"
+      do_live_sync
+      log_rotate
+      _cur=$(poll_fingerprint)
     fi
-  fi
-  unset _di_c
+    _last=$_cur
+  done
 }
 
 # ── The watcher itself ────────────────────────────────────────────────────────
@@ -86,69 +270,29 @@ run_watcher() {
     return 0
   fi
 
-  mkdir -p "$USER_CERT_DIR" 2>/dev/null
-  detect_inotify
-
-  if [ -n "$INOTIFY_BIN" ]; then
-    WATCH_MODE="inotifywait"
-  else
-    WATCH_MODE="poll"
-  fi
-
   daemon_detach
-  echo "$$" >"$WATCH_PID_FILE"
+  # Traps first, PID file second: a stop request can never find a PID whose
+  # owner would ignore it.
   trap 'watcher_shutdown' TERM INT HUP
-
-  log_sep "Live Sync watcher started (mode=$WATCH_MODE, pid=$$)"
-  write_stats "LIVESYNC_MODE=$WATCH_MODE" "LIVESYNC_PID=$$" "LIVESYNC_STATUS=running"
+  echo "$$" >"$WATCH_PID_FILE"
 
   # Never inherit a lock from a process that died mid-sync.
   lock_is_held "$SYNC_LOCK" || lock_release "$SYNC_LOCK"
 
-  if [ "$WATCH_MODE" = "inotifywait" ]; then
-    while true; do
-      "$INOTIFY_BIN" -q -t 45 \
-        -e create -e moved_to -e delete -e modify \
-        "$USER_CERT_DIR" >/dev/null 2>&1
-      _rc=$?
-      log_rotate
-      case "$_rc" in
-        0)
-          if lock_is_held "$SYNC_LOCK"; then
-            log_debug "Change detected but a sync is already running — skipping"
-          else
-            log_info "Change detected in $USER_CERT_DIR"
-            sleep 1 # debounce bursts of create+modify on the same file
-            do_live_sync
-          fi
-          ;;
-        2) : ;; # -t timeout, perfectly normal
-        *)
-          log_debug "inotifywait exited with $_rc — backing off 5s"
-          sleep 5
-          ;;
-      esac
-    done
+  if ev_setup; then
+    # No CHLD trap on purpose: in busybox ash a CHLD trap that fires while
+    # another trap runs (the TERM shutdown) makes every && / if in it read
+    # false. A dead inotifyd is found by the WATCH_TICK health check instead.
+    log_sep "Live Sync watcher started (mode=events, pid=$$)"
+    write_stats "LIVESYNC_MODE=events" "LIVESYNC_PID=$$" "LIVESYNC_STATUS=running" "WATCH_RESTARTS=0"
+    ev_loop
+    ev_stop_inotifyd
+    exec 3>&-
+    rm -f "$WATCH_FIFO" 2>/dev/null
   else
-    log_info "Polling $USER_CERT_DIR every 30s"
-    # The listing itself is the fingerprint — no md5sum dependency.
-    LAST_HASH=$(ls -la "$USER_CERT_DIR" 2>/dev/null)
-    while true; do
-      sleep 30
-      log_rotate
-      CURRENT_HASH=$(ls -la "$USER_CERT_DIR" 2>/dev/null)
-      if [ "$CURRENT_HASH" != "$LAST_HASH" ]; then
-        if lock_is_held "$SYNC_LOCK"; then
-          log_debug "Change detected but a sync is already running — skipping"
-        else
-          log_info "Poll: change detected in $USER_CERT_DIR"
-          do_live_sync
-        fi
-        CURRENT_HASH=$(ls -la "$USER_CERT_DIR" 2>/dev/null)
-      fi
-      LAST_HASH="$CURRENT_HASH"
-    done
+    log_sep "Live Sync watcher started (mode=poll, pid=$$)"
   fi
+  poll_loop
 }
 
 cmd_watch_start() {
@@ -158,7 +302,12 @@ cmd_watch_start() {
     echo "rc=0"
     return 0
   fi
-  spawn_detached sh "$MODDIR/service.sh" --watch
+  # Always the same shell as at boot (busybox ash), not the caller's mksh.
+  if [ -n "$BUSYBOX" ]; then
+    spawn_detached "$BUSYBOX" sh "$MODDIR/service.sh" --watch
+  else
+    spawn_detached sh "$MODDIR/service.sh" --watch
+  fi
   _i=0
   while [ "$_i" -lt 5 ]; do
     sleep 1
@@ -179,25 +328,29 @@ cmd_watch_start() {
 
 cmd_watch_stop() {
   _p=$(watcher_pid)
-  if [ "$_p" -gt 0 ] && [ -d "/proc/$_p" ]; then
+  if pid_is "$_p" "$WATCHER_ID"; then
     kill "$_p" 2>/dev/null
-    kill_children "$_p" TERM
+    # The watcher's TERM trap exits within a fraction of a second; poll in
+    # 0.2 s steps (1 s where sleep has no fractions), give up after ~4 s.
     _i=0
-    while [ -d "/proc/$_p" ] && [ "$_i" -lt 4 ]; do
-      sleep 1
+    while pid_alive "$_p" && [ "$_i" -lt 20 ]; do
+      sleep 0.2 2>/dev/null || sleep 1
       _i=$((_i + 1))
     done
-    if [ -d "/proc/$_p" ]; then
+    if pid_alive "$_p"; then
       kill -9 "$_p" 2>/dev/null
       kill_children "$_p" KILL
+      log_warn "Watcher (pid $_p) ignored TERM — killed"
     fi
-    log_info "Watcher stopped (was pid $_p)"
   fi
-  rm -f "$WATCH_PID_FILE" 2>/dev/null
+  # An inotifyd orphaned by a hard kill.
+  _ip=$(read_pid_file "$INOTIFYD_PID_FILE")
+  inotifyd_is "$_ip" && kill "$_ip" 2>/dev/null
+  watcher_clear_runtime
   write_stats "LIVESYNC_STATUS=stopped" "LIVESYNC_PID=0"
   echo "watcher=stopped"
   echo "rc=0"
-  unset _p _i
+  unset _p _i _ip
   return 0
 }
 
@@ -320,6 +473,21 @@ cmd_status() {
     done
   fi
 
+  _cust=0
+  _ctrusted=0
+  _cexcluded=0
+  if [ -d "$CUSTOM_CERT_DIR" ]; then
+    for _f in "$CUSTOM_CERT_DIR"/*; do
+      [ -f "$_f" ] || continue
+      _cust=$((_cust + 1))
+      if [ -d "$CERT_STAGE" ] && [ ! -f "$CERT_STAGE/${_f##*/}" ]; then
+        _cexcluded=$((_cexcluded + 1))
+        continue
+      fi
+      [ -f "$_store/${_f##*/}" ] && _ctrusted=$((_ctrusted + 1))
+    done
+  fi
+
   if watcher_is_running; then
     _wstate="running"
   elif [ "$(read_cfg LIVE_SYNC)" = "1" ]; then
@@ -338,7 +506,9 @@ cmd_status() {
   printf 'USER_CERTS=%s\n' "$_users"
   printf 'USER_TRUSTED=%s\n' "$_trusted"
   printf 'USER_EXCLUDED=%s\n' "$_excluded"
-  printf 'CUSTOM_CERTS=%s\n' "$(count_files "$CUSTOM_CERT_DIR")"
+  printf 'CUSTOM_CERTS=%s\n' "$_cust"
+  printf 'CUSTOM_TRUSTED=%s\n' "$_ctrusted"
+  printf 'CUSTOM_EXCLUDED=%s\n' "$_cexcluded"
   printf 'CUSTOM_DIR=%s\n' "$CUSTOM_CERT_DIR"
   printf 'FAIL=%s\n' "$(read_fail_count)"
   printf 'FAIL_LIMIT=%s\n' "$FAIL_LIMIT"
@@ -350,6 +520,12 @@ cmd_status() {
   printf 'WATCHER=%s\n' "$_wstate"
   printf 'WATCHER_PID=%s\n' "$(watcher_pid)"
   printf 'WATCH_MODE=%s\n' "$(read_stat LIVESYNC_MODE)"
+  _ip=$(read_pid_file "$INOTIFYD_PID_FILE")
+  inotifyd_is "$_ip" || _ip=0
+  printf 'INOTIFYD_PID=%s\n' "$_ip"
+  printf 'WATCH_RESTARTS=%s\n' "$(read_stat WATCH_RESTARTS)"
+  if [ -n "$BUSYBOX" ] && has_applet inotifyd; then _ia=1; else _ia=0; fi
+  printf 'INOTIFYD=%s\n' "$_ia"
   printf 'LIVESYNCS=%s\n' "$(read_stat LIVESYNCS)"
   printf 'LAST_SYNC=%s\n' "$(read_stat LAST_SYNC)"
   printf 'LOG_SIZE=%s\n' "$(file_size "$LOG_FILE")"
@@ -360,7 +536,7 @@ cmd_status() {
   printf 'TOOL_SETSID=%s\n' "${CMD_SETSID:-none}"
   printf 'NOW=%s\n' "$(date +%s)"
   printf 'rc=0\n'
-  unset _store _users _trusted _excluded _wstate _f
+  unset _store _users _trusted _excluded _wstate _f _ip _ia _cust _ctrusted _cexcluded
 }
 
 # Emits: <name>|<source>|<trusted 0/1>|<base64 DER>
@@ -417,6 +593,9 @@ boot_flow() {
   log_rotate
   log_sep "service.sh boot (SDK $SDK)"
   log_tools
+  # PIDs from the previous boot mean nothing now (and may belong to anything).
+  watcher_clear_runtime
+  repair_user_cert_dir
   write_stats "BOOT_STAGE=service"
 
   _z=$(wait_for_zygote 60)

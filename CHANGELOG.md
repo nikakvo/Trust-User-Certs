@@ -1,5 +1,94 @@
 # Changelog
 
+## v4
+
+Live Sync rewritten on busybox `inotifyd`, the bundled binary is gone, and the
+module no longer breaks installing the first user certificate. Custom
+certificates are watched and verified. New built-in help page.
+
+### Fixed — Live Sync did not work without Termux
+
+- **The bundled `bin/inotifywait` could not run on most devices.** It was built
+  in Termux and dynamically linked against `libinotifytools.so` with a Termux
+  `RUNPATH`, so it only started where Termux with `inotify-tools` was installed
+  — and even there only after the first unlock, because `/data/data` is
+  credential-encrypted. Everywhere else the linker failed on every call:
+  `CANNOT LINK EXECUTABLE … libinotifytools.so not found`.
+- **The failure was accepted and retried forever.** `detect_inotify()` only
+  rejected exit codes ≥ 126, but a linker failure exits with 1. The watcher then
+  retried every 5 s from boot, logged at debug level only, never fell back to
+  polling, while the UI showed "event-driven". Live Sync silently did nothing.
+
+### Changed — Live Sync
+
+- The binary is removed. Live Sync now uses the root manager's own busybox
+  `inotifyd` (Magisk, KernelSU, SukiSU and APatch all ship it) writing into a
+  FIFO that the watcher reads with the shell's builtin `read`. Idle cost: two
+  sleeping processes, nothing spawned.
+- Watches `cacerts-added`, its parent `/data/misc/user/0` (so the first
+  certificate ever is seen even when the directory does not exist yet) and the
+  custom certificate directory. Only creations, completed writes, deletions
+  and renames count — reading certificates never triggers a sync.
+- **One sync per change.** Events are debounced (2 s of quiet, at most 10 s),
+  measured on HyperOS 3: install = create + write, remove = write + delete.
+- **Self-healing.** A health check every 60 s restarts a dead `inotifyd` and
+  resyncs; more than 5 failures in 10 min, or no `inotifyd` at all, switches to
+  polling every 30 s (`stat` fingerprint instead of `ls -la`). Detection tests
+  the real thing — the watcher is started and must stay alive.
+- **Process identity.** A PID from a file counts only if the process is alive,
+  not a zombie, and its command line contains the module's path. Stale runtime
+  files are cleared at boot. Previously any process named `service.sh` — e.g.
+  another module's — with a recycled PID made the watcher refuse to start.
+- Clean shutdown in ~0.2 s (traps before the PID file, 0.2 s polling), one log
+  line per stop; `--watch-stop` and `uninstall.sh` only signal verified PIDs.
+- A watcher started from the UI always runs under busybox ash, like at boot.
+- The installer no longer kills the running watcher by an unverified PID; the
+  old one keeps working until the reboot that activates the update.
+- `--status` adds `WATCH_MODE=events|poll`, `INOTIFYD_PID`, `INOTIFYD`,
+  `WATCH_RESTARTS`, `CUSTOM_TRUSTED`, `CUSTOM_EXCLUDED`.
+
+### Fixed — the first user certificate could not be installed
+
+- `post-fs-data.sh`, the installer and the watcher created
+  `/data/misc/user/0/cacerts-added` as `root:root`. On a device without user
+  certificates Android (KeyChain runs as uid system) then could not write into
+  it. The module no longer creates it; Android does, with the right owner.
+- Repair on install and at boot: a root-owned empty `cacerts-added` is removed,
+  a root-owned one with files is handed to `system:system 0755`. A directory
+  owned by system is never touched.
+
+### Fixed — custom certificates were never verified
+
+- `verify_inject` only checked user certificates, so a custom certificate that
+  never reached the store still reported `Verify OK`. Custom certificates are
+  now checked the same way:
+  `Verify OK — 151 certs live, 1/1 user certs trusted, 1/1 custom certs trusted`.
+- The WebUI shows `PARTIAL` when a custom certificate is missing and a
+  `custom x/y` chip when you have any.
+
+### Added
+
+- **Help page** (`HELP` in the WebUI): what the module does, installing
+  certificates and the three Settings options, custom certificates, injection,
+  Live Sync, boot-loop guard, exclusion rules, CLI, troubleshooting, file
+  layout. Includes the Xiaomi.eu / HyperOS 3 menu path.
+- Live Sync on the custom certificate directory — no more Force Inject after
+  dropping a file there.
+
+### Unchanged
+
+The injection itself (staging, mounts, `nsenter`), the boot-loop guard and its
+fail-counter semantics are untouched; `post-fs-data.sh` only lost the `mkdir`.
+
+### Testing
+
+Tested on a Poco F6 Pro, Xiaomi.eu ROM (HyperOS 3, Android 16), SukiSU-Ultra:
+install/remove through Settings, custom certificates, `inotifyd` restart,
+stop/start, WebUI toggle. A sandbox harness with 145 checks covers the watcher,
+fallbacks, process identity, boot flow, ownership repair and verification.
+
+---
+
 ## v3.1
 
 ### Fixed — the Live Sync watcher could die with the manager app
