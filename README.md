@@ -303,4 +303,4 @@ Inspired by and initially based on [AlwaysTrustUserCerts](https://github.com/NVI
 
 ## License
 
-MIT
+[MIT](LICENSE)
