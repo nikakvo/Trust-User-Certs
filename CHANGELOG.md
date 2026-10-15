@@ -1,5 +1,14 @@
 # Changelog
 
+## v5
+
+**Module**
+- New card banner in the root manager (SukiSU-Ultra and other managers that support module banners).
+
+No functional changes - user CA certificates are moved into the system trust store exactly as in v4. Updating is optional.
+
+---
+
 ## v4
 
 Live Sync rewritten on busybox `inotifyd`, the bundled binary is gone, and the
