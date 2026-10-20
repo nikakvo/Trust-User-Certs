@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="trust-user-certs.png" alt="DNSCrypt Proxy Arm64" width="640">
-</p>
+<p align="center"><img src="trust-user-certs.png" alt="Tears GPS"></p>
 
 # Trust-User-Certs
 
