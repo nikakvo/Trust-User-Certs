@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="trust-user-certs.png" alt="DNSCrypt Proxy Arm64" width="640">
+</p>
+
 # Trust-User-Certs
 
 A KernelSU / Magisk / APatch module that injects user-installed CA certificates into the system trust store, making them trusted by all apps — including those that ignore user certificates.
