@@ -1,4 +1,4 @@
-<p align="center"><img src="trust-user-certs.png" alt="Tears GPS"></p>
+<p align="center"><img src="trust-user-certs.png" alt="Trust User Certs"></p>
 
 # Trust-User-Certs
 
