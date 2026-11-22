@@ -1,5 +1,12 @@
 # Changelog
 
+## v5.3
+
+**WebUI**
+- The JustTrustMePro and GitHub links open in your browser instead of inside the WebUI, where a website could reach the root manager.
+- Help: every command sits in a box with a COPY button, tables read well on a phone, and a back-to-top arrow shows once you scroll down.
+- Help: the contents and the links to other sections no longer add steps to the phone's Back. One Back leaves the help page, however many sections you opened.
+
 ## v5.2
 
 **WebUI**

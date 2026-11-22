@@ -566,7 +566,7 @@ body {
 <!-- JUST TRUST ME PRO TIP -->
 <div class="sec"><span class="sec-ico">🔓</span> ssl unpinning</div>
 <div style="padding: 0 16px 20px;">
-  <a href="https://github.com/hang666/JustTrustMePro/releases" target="_blank" style="text-decoration: none; display: block;">
+  <a href="#" data-ext="https://github.com/hang666/JustTrustMePro/releases" style="text-decoration: none; display: block;">
     <div style="
       background: var(--surface);
       border: 1px solid rgba(251,191,36,0.25);
@@ -610,7 +610,7 @@ body {
   </a>
 </div>
 
-<div class="footer">trust-user-certs · <a href="https://github.com/nikakvo" target="_blank">Tears Burn →</a></div>
+<div class="footer">trust-user-certs · <a href="#" data-ext="https://github.com/nikakvo/">Tears Burn →</a></div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -749,6 +749,37 @@ function esc(s) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// Outside sites open in the phone's browser. The root manager would load a
+// link in this WebView, where the site's scripts could reach ksu.exec.
+async function openExt(url) {
+  if (!/^https:\/\/[a-z0-9.-]+\/[a-z0-9._\/-]*$/i.test(url)) { showToast('Not opened: not an https address', 'err'); return false; }
+  var cmd = "am start -a android.intent.action.VIEW -d '" + url + "' 2>&1";
+  var fail = function (m) { showToast('Could not open the browser: ' + m, 'err'); return false; };
+  var r;
+  try {
+    if (!hasBridge()) return fail('no root bridge');
+    if (EXEC_MODE === 'legacy') r = legacyExec(cmd);
+    else {
+      try { r = await callbackExec(cmd, 15000); }
+      catch (e) {
+        if (/timeout/.test(String(e && e.message))) return true;
+        if (EXEC_MODE === 'callback') throw e;
+        r = legacyExec(cmd);
+      }
+    }
+  } catch (e) { return fail(String((e && e.message) || e)); }
+  var out = (r.stdout || '') + (r.stderr || '');
+  var err = out.split('\n').filter(function (l) { return /^Error/.test(l); })[0];
+  if (r.errno !== 0 || err) return fail(err || 'am start ended with ' + r.errno);
+  return true;
+}
+document.addEventListener('click', function (e) {
+  var a = e.target.closest && e.target.closest('a[data-ext]');
+  if (!a) return;
+  e.preventDefault();
+  openExt(a.getAttribute('data-ext'));
+});
 
 // ── Toast ────────────────────────────────────────────────────────────────────
 var _toastTimer;
